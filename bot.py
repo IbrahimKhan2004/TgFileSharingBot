@@ -238,6 +238,7 @@ async def process_message(client, message):
 
     media = message.document or message.video or message.audio
     poster_url = None
+    thumbnail = None
 
     if media:
         caption = message.caption if message.caption else media.file_name
@@ -245,6 +246,7 @@ async def process_message(client, message):
         file_size = humanbytes(media.file_size)
         if message.video:
             duration = TimeFormatter(media.duration * 1000)
+            thumbnail = await bot.download_media(media.thumbs[0].file_id)
         else:
             duration = ""
         if not message.audio: 
@@ -270,6 +272,14 @@ async def process_message(client, message):
                     parse_mode=enums.ParseMode.HTML,
                     reply_markup=keyboard
                     )
+            elif thumbnail:
+                await bot.send_photo(
+                    UPDATE_CHANNEL_ID,
+                    photo=thumbnail,
+                    caption=v_info,
+                    parse_mode=enums.ParseMode.HTML,
+                    reply_markup=keyboard
+                )
             elif not message.audio:
                 await bot.send_message(
                     UPDATE_CHANNEL_ID,

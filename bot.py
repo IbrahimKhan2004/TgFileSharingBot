@@ -102,6 +102,14 @@ async def start_command(client, message):
         await auto_delete_message(message, await message.reply_text(f"An error occurred: {e}"))
 
 
+@bot.on_message(filters.private & (filters.document | filters.video) & filters.user(OWNER_ID))
+async def handle_new_message(client, message):
+    media = message.video or message.document 
+    caption = await remove_unwanted(message.caption if message.caption else media.file_name)
+    cpy_msg = await message.copy(DB_CHANNEL_ID, caption=f"<b>{caption}</b>", parse_mode=enums.ParseMode.HTML)
+    await message_queue.put(cpy_msg)
+    await message.delete()
+
 @bot.on_message(filters.chat(DB_CHANNEL_ID) & (filters.document | filters.video |filters.audio))
 async def handle_new_message(client, message):
     # Add the message to the queue for sequential processing

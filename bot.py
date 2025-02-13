@@ -102,6 +102,14 @@ async def start_command(client, message):
         await auto_delete_message(message, await message.reply_text(f"An error occurred: {e}"))
 
 
+@bot.on_message(filters.private & (filters.document | filters.video) & filters.user(OWNER_ID))
+async def handle_new_message(client, message):
+    media = message.video or message.document 
+    caption = await remove_unwanted(message.caption if message.caption else media.file_name)
+    cpy_msg = await message.copy(DB_CHANNEL_ID, caption=f"<b>{caption}</b>", parse_mode=enums.ParseMode.HTML)
+    await message_queue.put(cpy_msg)
+    await message.delete()
+
 @bot.on_message(filters.chat(DB_CHANNEL_ID) & (filters.document | filters.video |filters.audio))
 async def handle_new_message(client, message):
     # Add the message to the queue for sequential processing
@@ -230,6 +238,7 @@ async def process_message(client, message):
 
     media = message.document or message.video or message.audio
     poster_url = None
+    thumbnail = None
 
     if media:
         caption = message.caption if message.caption else media.file_name
@@ -237,6 +246,7 @@ async def process_message(client, message):
         file_size = humanbytes(media.file_size)
         if message.video:
             duration = TimeFormatter(media.duration * 1000)
+            thumbnail = await bot.download_media(media.thumbs[0].file_id)
         else:
             duration = ""
         if not message.audio: 
@@ -262,6 +272,14 @@ async def process_message(client, message):
                     parse_mode=enums.ParseMode.HTML,
                     reply_markup=keyboard
                     )
+            elif thumbnail:
+                await bot.send_photo(
+                    UPDATE_CHANNEL_ID,
+                    photo=thumbnail,
+                    caption=v_info,
+                    parse_mode=enums.ParseMode.HTML,
+                    reply_markup=keyboard
+                )
             elif not message.audio:
                 await bot.send_message(
                     UPDATE_CHANNEL_ID,

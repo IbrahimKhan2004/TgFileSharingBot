@@ -7,6 +7,7 @@ from mutagen.mp3 import MP3
 from mutagen.flac import FLAC
 from mutagen.mp4 import MP4
 from mutagen.id3 import ID3, APIC
+from pyrogram.errors import FloodWait
 
 async def remove_unwanted(input_string):
     # Use regex to match .mkv or .mp4 and everything that follows
@@ -117,3 +118,15 @@ async def get_audio_thumbnail(audio_path):
             cover = audio.tags['covr'][0]
             return io.BytesIO(cover)
     return None
+
+async def safe_api_call(coro):
+    """Utility wrapper to add delay before every bot API call."""
+    while True:
+        try:
+            await asyncio.sleep(3)
+            return await coro
+        except FloodWait as e:
+            print(f"FloodWait: Sleeping for {e.value} seconds")
+            await asyncio.sleep(e.value)
+        except Exception:
+            raise

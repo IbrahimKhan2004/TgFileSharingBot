@@ -21,7 +21,6 @@ uvloop.install()
 message_queue = Queue()
 
 user_data = {}
-user_sessions = {}
 
 # PROGRAM BOT INITIALIZATION 
 
@@ -55,19 +54,19 @@ async def start_command(client, message):
             
             # Handle token flow
             if command_arg == "token":
-                msg = await bot.get_messages(LOG_CHANNEL_ID, TUT_ID)
-                sent_msg = await msg.copy(chat_id=message.chat.id)
-                await message.delete()
+                msg = await safe_api_call(bot.get_messages(LOG_CHANNEL_ID, TUT_ID))
+                sent_msg = await safe_api_call(msg.copy(chat_id=message.chat.id))
+                await safe_api_call(message.delete())
                 await asyncio.sleep(300)
-                await sent_msg.delete()
+                await safe_api_call(sent_msg.delete())
                 return
 
             # Handle token verification
             if command_arg.startswith("token_"):
                 input_token = command_arg[6:]
                 token_msg = await verify_token(user_id, input_token)
-                reply = await message.reply_text(token_msg)
-                await bot.send_message(LOG_CHANNEL_ID, f"User🕵️‍♂️{user_link} with 🆔 {user_id} @{bot_username} {token_msg}", parse_mode=enums.ParseMode.HTML)
+                reply = await safe_api_call(message.reply_text(token_msg))
+                await safe_api_call(bot.send_message(LOG_CHANNEL_ID, f"User🕵️‍♂️{user_link} with 🆔 {user_id} @{bot_username} {token_msg}", parse_mode=enums.ParseMode.HTML))
                 await auto_delete_message(message, reply)
                 return
 
@@ -76,14 +75,13 @@ async def start_command(client, message):
             if not await check_access(message, user_id):
                 return
 
-            file_message = await bot.get_messages(DB_CHANNEL_ID, file_id)
+            file_message = await safe_api_call(bot.get_messages(DB_CHANNEL_ID, file_id))
             media = file_message.video or file_message.audio or file_message.document
             if media:
                 caption = await remove_extension(file_message.caption.html or "")
-                copy_message = await file_message.copy(chat_id=message.chat.id, caption=f"<b>{caption}</b>", parse_mode=enums.ParseMode.HTML)
+                copy_message = await safe_api_call(file_message.copy(chat_id=message.chat.id, caption=f"<b>{caption}</b>", parse_mode=enums.ParseMode.HTML))
                 user_data[user_id]['file_count'] = user_data[user_id].get('file_count', 0) + 1
                 await auto_delete_message(message, copy_message)
-                await asyncio.sleep(3)
             else:
                 await auto_delete_message(message, await message.reply_text("File not found or inaccessible."))
             return
@@ -92,23 +90,12 @@ async def start_command(client, message):
         await greet_user(message)
         
     except ValueError:
-        reply = await message.reply_text("Invalid File ID.")
+        reply = await safe_api_call(message.reply_text("Invalid File ID."))
         await auto_delete_message(message, reply)
-    except FloodWait as f:
-        await asyncio.sleep(f.value)
-        await start_command(client, message)  # Retry after the flood wait
     except Exception as e:
         logger.error(f"Error in start command: {e}")
         await auto_delete_message(message, await message.reply_text(f"An error occurred: {e}"))
 
-
-@bot.on_message(filters.private & (filters.document | filters.video) & filters.user(OWNER_ID))
-async def handle_new_message(client, message):
-    media = message.video or message.document 
-    caption = await remove_unwanted(message.caption if message.caption else media.file_name)
-    cpy_msg = await message.copy(DB_CHANNEL_ID, caption=f"<b>{caption}</b>", parse_mode=enums.ParseMode.HTML)
-    await message_queue.put(cpy_msg)
-    await message.delete()
 
 @bot.on_message(filters.chat(DB_CHANNEL_ID) & (filters.document | filters.video |filters.audio))
 async def handle_new_message(client, message):
@@ -119,14 +106,11 @@ async def handle_new_message(client, message):
 async def handle_file(client, message):
     try:
         user_id = message.from_user.id
-        user_sessions[user_id] = True
 
         # Helper function to get user input
         async def get_user_input(prompt):
             bot_message = await message.reply_text(prompt)
             user_message = await bot.listen(chat_id=message.chat.id, filters=filters.user(OWNER_ID))
-            if user_sessions.get(user_id) == False:
-                raise Exception("Process cancelled")
             asyncio.create_task(auto_delete_message(bot_message, user_message))
             return await extract_tg_link(user_message.text.strip())
 
@@ -142,8 +126,6 @@ async def handle_file(client, message):
         batch_size = 199
 
         for start in range(int(start_msg_id), int(end_msg_id) + 1, batch_size):            
-            if user_sessions.get(user_id) == False:
-                raise Exception("Process cancelled")
             end = min(start + batch_size - 1, int(end_msg_id))
             file_messages = await bot.get_messages(DB_CHANNEL_ID, range(start, end + 1))
 
@@ -152,14 +134,6 @@ async def handle_file(client, message):
 
     except Exception as e:
         await message.reply_text(f"An error occurred: {e}")
-    finally:
-        user_sessions.pop(user_id, None)
-
-@bot.on_message(filters.private & filters.command("cancel") & filters.user(OWNER_ID))
-async def cancel_process(client, message):
-    user_id = message.from_user.id
-    user_sessions[user_id] = False
-    await message.reply_text("Process has been cancelled.")
 
 @bot.on_message(filters.private & filters.command('broadcast') & filters.user(OWNER_ID))
 async def send_text(client, message):
@@ -234,8 +208,6 @@ async def process_queue():
 
 async def process_message(client, message):
 
-    await asyncio.sleep(3)
-
     media = message.document or message.video or message.audio
     poster_url = None
     thumbnail = None
@@ -246,14 +218,14 @@ async def process_message(client, message):
         file_size = humanbytes(media.file_size)
         if message.video:
             duration = TimeFormatter(media.duration * 1000)
-            thumbnail = await bot.download_media(media.thumbs[0].file_id)
+            thumbnail = await safe_api_call(bot.download_media(media.thumbs[0].file_id))
         else:
             duration = ""
         if not message.audio: 
             movie_name, release_year = await extract_movie_info(file_name)
             poster_url = await get_by_name(movie_name, release_year)
         if message.audio:
-            audio_path = await bot.download_media(message.audio.file_id)
+            audio_path = await safe_api_call(bot.download_media(message.audio.file_id))
             audio_thumb = await get_audio_thumbnail(audio_path)
 
         file_id = message.id
@@ -265,54 +237,54 @@ async def process_message(client, message):
 
         try:           
             if poster_url:
-                await bot.send_photo(
+                await safe_api_call(bot.send_photo(
                     UPDATE_CHANNEL_ID,
                     photo=poster_url,
                     caption=v_info,
                     parse_mode=enums.ParseMode.HTML,
                     reply_markup=keyboard
-                    )
+                    ))
             elif thumbnail:
-                await bot.send_photo(
+                await safe_api_call(bot.send_photo(
                     UPDATE_CHANNEL_ID,
                     photo=thumbnail,
                     caption=v_info,
                     parse_mode=enums.ParseMode.HTML,
                     reply_markup=keyboard
-                )
+                ))
             elif not message.audio:
-                await bot.send_message(
+                await safe_api_call(bot.send_message(
                     UPDATE_CHANNEL_ID,
                     text=v_info,
                     parse_mode=enums.ParseMode.HTML,
                     reply_markup=keyboard 
-                    )
+                    ))
                 
             if message.audio:
-                await bot.send_photo(
+                await safe_api_call(bot.send_photo(
                     UPDATE_CHANNEL_ID,
                     photo=audio_thumb,
                     caption=a_info,
                     parse_mode=enums.ParseMode.HTML,
                     reply_markup=keyboard
-                    )
+                    ))
                 os.remove(audio_path) 
 
         except (WebpageMediaEmpty, WebpageCurlFailed):
             logger.info(f"{poster_url}")
-            await bot.send_message(
+            await safe_api_call(bot.send_message(
                 UPDATE_CHANNEL_ID,
                 text=v_info,
                 parse_mode=enums.ParseMode.HTML,
                 reply_markup=keyboard
-                )
-            
+                ))
+
         except FloodWait as f:
             await asyncio.sleep(f.value)
             await process_message(client, message)
 
         except Exception as e:
-            await bot.send_message(OWNER_ID, text=f"Error in Proccessing MSG:{file_name} {e}")
+            await safe_api_call(bot.send_message(OWNER_ID, text=f"Error in Proccessing MSG:{file_name} {e}"))
 
 @bot.on_message(filters.command('restart') & filters.private & filters.user(OWNER_ID))
 async def restart(client, message):

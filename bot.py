@@ -135,6 +135,47 @@ async def handle_file(client, message):
     except Exception as e:
         await message.reply_text(f"An error occurred: {e}")
 
+@bot.on_message(filters.private & filters.command("delete") & filters.user(OWNER_ID))
+async def delete_messages_command(client, message):
+    try:
+        user_id = message.from_user.id
+
+        # Helper function to get user input
+        async def get_user_input(prompt):
+            bot_message = await message.reply_text(prompt)
+            user_message = await bot.listen(chat_id=message.chat.id, filters=filters.user(OWNER_ID))
+            asyncio.create_task(auto_delete_message(bot_message, user_message))
+            return await extract_tg_link(user_message.text.strip())
+
+        # Get the start and end message IDs from the user
+        start_msg_id = int(await get_user_input("Send the link of the first message you want to delete (from UPDATE_CHANNEL_ID):"))
+        end_msg_id = int(await get_user_input("Send the link of the last message you want to delete (from UPDATE_CHANNEL_ID):"))
+
+        deleted_count = 0
+        batch_size = 99  # Pyrogram allows deleting up to 100 messages at once
+
+        for i in range(start_msg_id, end_msg_id + 1, batch_size):
+            messages_to_delete = []
+            for msg_id in range(i, min(i + batch_size, end_msg_id + 1)):
+                messages_to_delete.append(msg_id)
+            
+            if messages_to_delete:
+                try:
+                    await safe_api_call(client.delete_messages(chat_id=UPDATE_CHANNEL_ID, message_ids=messages_to_delete))
+                    deleted_count += len(messages_to_delete)
+                    await message.reply_text(f"Messages {messages_to_delete[0]} to {messages_to_delete[-1]} deleted.")
+                except Exception as e:
+                    await message.reply_text(f"Error deleting messages: {e}")
+                    logger.error(f"Error deleting messages: {e}")
+
+        await message.reply_text(f"Successfully deleted {deleted_count} messages from UPDATE_CHANNEL_ID.")
+
+    except ValueError:
+        await message.reply_text("Invalid message ID. Please provide only numerical message IDs or valid Telegram links.")
+    except Exception as e:
+        logger.error(f"Error in delete command: {e}")
+        await message.reply_text(f"An error occurred: {e}")
+
 @bot.on_message(filters.private & filters.command('broadcast') & filters.user(OWNER_ID))
 async def send_text(client, message):
     if message.reply_to_message:

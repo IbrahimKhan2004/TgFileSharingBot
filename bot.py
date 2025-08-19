@@ -97,7 +97,7 @@ async def start_command(client, message):
         await auto_delete_message(message, await message.reply_text(f"An error occurred: {e}"))
 
 
-@bot.on_message(filters.chat(DB_CHANNEL_ID) & (filters.document | filters.video |filters.audio))
+@bot.on_message(filters.chat(DB_CHANNEL_ID) & (filters.document | filters.video |filters.audio | filters.sticker))
 async def handle_new_message(client, message):
     # Add the message to the queue for sequential processing
     await message_queue.put(message)
@@ -285,6 +285,10 @@ async def process_message(client, message):
 
         except Exception as e:
             await safe_api_call(bot.send_message(OWNER_ID, text=f"Error in Proccessing MSG:{file_name} {e}"))
+    
+    elif message.sticker:
+        await safe_api_call(message.copy(UPDATE_CHANNEL_ID))
+
 
 @bot.on_message(filters.command('restart') & filters.private & filters.user(OWNER_ID))
 async def restart(client, message):

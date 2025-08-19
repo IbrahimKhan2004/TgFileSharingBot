@@ -34,13 +34,21 @@ async def auto_delete_message(user_message, bot_message):
 
 async def extract_tg_link(telegram_link):
     try:
-        pattern = re.compile(r'https://t\.me/c/(-?\d+)/(\d+)')
-        match = pattern.match(telegram_link)
-        if match:
-            message_id = match.group(2)
+        # Pattern for private channel links (t.me/c/channel_id/message_id)
+        private_pattern = re.compile(r'https://t\.me/c/(-?\d+)/(\d+)')
+        private_match = private_pattern.match(telegram_link)
+        if private_match:
+            message_id = private_match.group(2)
             return message_id
-        else:
-            return None
+
+        # Pattern for public channel links (t.me/channel_username/message_id)
+        public_pattern = re.compile(r'https://t\.me/([a-zA-Z0-9_]+)/(\d+)')
+        public_match = public_pattern.match(telegram_link)
+        if public_match:
+            message_id = public_match.group(2)
+            return message_id
+
+        return None # No match found for either pattern
     except Exception as e:
         logger.error(e)
         return None

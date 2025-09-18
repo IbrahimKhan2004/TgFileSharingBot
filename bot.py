@@ -14,6 +14,7 @@ from utils import *
 from tmdb import get_by_name
 from shorterner import shorten_url
 from database import add_user, del_user, full_userbase, present_user
+import urllib.parse # Added: For URL encoding
 
 uvloop.install()
 
@@ -385,36 +386,52 @@ async def check_access(message, user_id):
     
 async def update_token(user_id):
     try:
-        time = user_data[user_id]['time']
-        expiry = time + TOKEN_TIMEOUT
-        if time < expiry:
-            token = user_data[user_id]['token']
-        else:
-            token = str(uuid.uuid4())
+        token = str(uuid.uuid4())
         current_time = tm()
         user_data[user_id] = {"token": token, "time": current_time, "status": "unverified", "file_count": 0}
-        urlshortx = await shorten_url(f'https://telegram.dog/{bot_username}?start=token_{token}')
-        token_url = f'https://telegram.me/{bot_username}?start=token'
-        button1 = InlineKeyboardButton("🎟️ Get Token", url=urlshortx)
-        button2 = InlineKeyboardButton("How to get verified ✅", url=token_url)
+        
+        # 1. Create the deep link URL for the bot
+        bot_deep_link = f'https://telegram.dog/{bot_username}?start=token_{token}'
+        
+        # 2. Shorten this deep link using the external URL shortener (shorterner.py)
+        external_shortened_url = await shorten_url(bot_deep_link)
+
+        # 3. Create the link to your Flask app's gate
+        # This will be the URL for the "🎟️ Get Token" button in Telegram
+        flask_gate_link = (
+            f"{FLASK_APP_BASE_URL}/gate?"
+            f"redirect_to_shortener={urllib.parse.quote_plus(external_shortened_url)}" # Pass the URL shortener link to Flask
+        )
+        
+        button1 = InlineKeyboardButton("🎟️ Get Token", url=flask_gate_link) # Link to your Flask app gate
+        button2 = InlineKeyboardButton("How to get verified ✅", url=f'https://telegram.me/{bot_username}?start=token')
         button = InlineKeyboardMarkup([[button1], [button2]]) 
         return button
     except Exception as e:
         logger.error(f"error in update_token: {e}")
+        return InlineKeyboardMarkup([[InlineKeyboardButton("Error getting token", callback_data="error_token")]])
 
 async def genrate_token(user_id):
     try:
         token = str(uuid.uuid4())
         current_time = tm()
         user_data[user_id] = {"token": token, "time": current_time, "status": "unverified", "file_count": 0}
-        urlshortx = await shorten_url(f'https://telegram.me/{bot_username}?start=token_{token}')
-        token_url = f'https://telegram.dog/{bot_username}?start=token'
-        button1 = InlineKeyboardButton("🎟️ Get Token", url=urlshortx)
-        button2 = InlineKeyboardButton("How to get verified ✅", url=token_url)
+        
+        bot_deep_link = f'https://telegram.dog/{bot_username}?start=token_{token}'
+        external_shortened_url = await shorten_url(bot_deep_link)
+
+        flask_gate_link = (
+            f"{FLASK_APP_BASE_URL}/gate?"
+            f"redirect_to_shortener={urllib.parse.quote_plus(external_shortened_url)}"
+        )
+        
+        button1 = InlineKeyboardButton("🎟️ Get Token", url=flask_gate_link)
+        button2 = InlineKeyboardButton("How to get verified ✅", url=f'https://telegram.me/{bot_username}?start=token')
         button = InlineKeyboardMarkup([[button1], [button2]]) 
         return button
     except Exception as e:
         logger.error(f"error in genrate_token: {e}")
+        return InlineKeyboardMarkup([[InlineKeyboardButton("Error getting token", callback_data="error_token")]])
 
 async def greet_user(message):
     user_link = await get_user_link(message.from_user)
@@ -449,6 +466,7 @@ async def get_user_link(user: User) -> str:
 
 async def main():
     await asyncio.create_task(process_queue())
+    await asyncio.Event().wait()
 
 if __name__ == "__main__":
     logging.basicConfig(level=logging.INFO)

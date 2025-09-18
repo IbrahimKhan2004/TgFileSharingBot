@@ -56,6 +56,8 @@ UPDATE_CHANNEL_ID = int(os.getenv('UPDATE_CHANNEL_ID'))
 TUT_ID = int(os.getenv('TUT_ID'))
 DAILY_LIMIT = int(os.getenv('DAILY_LIMIT'))
 
+# NEW: Flask App Base URL
+FLASK_APP_BASE_URL = os.getenv('FLASK_APP_BASE_URL', 'http://127.0.0.1:5000')
 
 #MONGO URI
 MONGO_URI = os.getenv('MONGO_URI')

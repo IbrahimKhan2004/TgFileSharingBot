@@ -65,6 +65,37 @@ async def start_command(client, message):
             # Handle token verification
             if command_arg.startswith("token_"):
                 input_token = command_arg[6:]
+                
+                # Bypass detection logic
+                if user_id in user_data and 'inittime' in user_data[user_id]:
+                    inittime = user_data[user_id]['inittime']
+                    duration = tm() - inittime
+                    if MINIMUM_DURATION and (duration < MINIMUM_DURATION):
+                        user_data[user_id]['status'] = "unverified"
+                        user_data[user_id]['time'] = 0
+                        user_data[user_id]['file_count'] = 0
+                        
+                        log_message = (
+                            f"User🕵️‍♂️{user_link} with 🆔 {user_id} @{bot_username} "
+                            f"attempted token bypass! ❌\n"
+                            f"Time taken: {duration:.2f} seconds (Min required: {MINIMUM_DURATION} seconds)\n"
+                            f"Token: `{input_token}`"
+                        )
+                        await safe_api_call(bot.send_message(LOG_CHANNEL_ID, log_message, parse_mode=enums.ParseMode.HTML))
+                        
+                        warning_message = (
+                            f"**Bypass Detected! 🚨**\n\n"
+                            f"It seems you tried to bypass the token verification process. "
+                            f"This is strictly prohibited and can lead to a permanent ban. "
+                            f"Your token has been invalidated.\n\n"
+                            f"**Do NOT attempt this again.** "
+                            f"Please generate a new token and follow the instructions carefully. "
+                            f"Repeated attempts will result in a permanent ban without warning."
+                        )
+                        reply = await safe_api_call(message.reply_text(warning_message))
+                        await auto_delete_message(message, reply)
+                        return
+                
                 token_msg = await verify_token(user_id, input_token)
                 reply = await safe_api_call(message.reply_text(token_msg))
                 await safe_api_call(bot.send_message(LOG_CHANNEL_ID, f"User🕵️‍♂️{user_link} with 🆔 {user_id} @{bot_username} {token_msg}", parse_mode=enums.ParseMode.HTML))
@@ -347,7 +378,7 @@ async def verify_token(user_id, input_token):
     stored_token = user_data[user_id]['token']
     if input_token == stored_token:
         token = str(uuid.uuid4())
-        user_data[user_id] = {"token": token, "time": current_time, "status": "verified", "file_count": 0}
+        user_data[user_id] = {"token": token, "time": current_time, "status": "verified", "file_count": 0, "inittime": current_time}
         return f'Token Verified ✅ (Validity: {get_readable_time(TOKEN_TIMEOUT)})'
     else:
         return f'Token Mismatched ❌'
@@ -388,7 +419,7 @@ async def update_token(user_id):
     try:
         token = str(uuid.uuid4())
         current_time = tm()
-        user_data[user_id] = {"token": token, "time": current_time, "status": "unverified", "file_count": 0}
+        user_data[user_id] = {"token": token, "time": current_time, "status": "unverified", "file_count": 0, "inittime": current_time}
         
         # 1. Create the deep link URL for the bot
         bot_deep_link = f'https://telegram.dog/{bot_username}?start=token_{token}'
@@ -415,7 +446,7 @@ async def genrate_token(user_id):
     try:
         token = str(uuid.uuid4())
         current_time = tm()
-        user_data[user_id] = {"token": token, "time": current_time, "status": "unverified", "file_count": 0}
+        user_data[user_id] = {"token": token, "time": current_time, "status": "unverified", "file_count": 0, "inittime": current_time}
         
         bot_deep_link = f'https://telegram.dog/{bot_username}?start=token_{token}'
         external_shortened_url = await shorten_url(bot_deep_link)

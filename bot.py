@@ -12,9 +12,10 @@ from asyncio import Queue
 from config import *
 from utils import *
 from tmdb import get_by_name
-from shorterner import shorten_url
+# from shorterner import shorten_url # REMOVE THIS IMPORT - Shortening will be done by Flask
 from database import add_user, del_user, full_userbase, present_user
-import urllib.parse # Added: For URL encoding
+import urllib.parse
+import secrets # NEW: For generating custom short codes
 
 uvloop.install()
 
@@ -36,6 +37,8 @@ bot = Client(
 
 bot_loop = bot.loop
 bot_username = bot.me.username
+
+# --- NEW: Shared storage for custom short links (for bot to interact with Flask's memory) ---
 
 @bot.on_message(filters.private & filters.command("start"))
 async def start_command(client, message):
@@ -393,17 +396,14 @@ async def update_token(user_id):
         # 1. Create the deep link URL for the bot
         bot_deep_link = f'https://telegram.dog/{bot_username}?start=token_{token}'
         
-        # 2. Shorten this deep link using the external URL shortener (shorterner.py)
-        external_shortened_url = await shorten_url(bot_deep_link)
-
-        # 3. Create the link to your Flask app's gate
-        # This will be the URL for the "🎟️ Get Token" button in Telegram
+        # 2. Flask gate ko original bot deep link bhejen
+        # Flask gate is deep link ko server-side shorten karega aur phir redirect karega
         flask_gate_link = (
             f"{FLASK_APP_BASE_URL}/gate?"
-            f"redirect_to_shortener={urllib.parse.quote_plus(external_shortened_url)}" # Pass the URL shortener link to Flask
+            f"bot_deep_link={urllib.parse.quote_plus(bot_deep_link)}"
         )
         
-        button1 = InlineKeyboardButton("🎟️ Get Token", url=flask_gate_link) # Link to your Flask app gate
+        button1 = InlineKeyboardButton("🎟️ Get Token", url=flask_gate_link)
         button2 = InlineKeyboardButton("How to get verified ✅", url=f'https://telegram.me/{bot_username}?start=token')
         button = InlineKeyboardMarkup([[button1], [button2]]) 
         return button
@@ -418,11 +418,10 @@ async def genrate_token(user_id):
         user_data[user_id] = {"token": token, "time": current_time, "status": "unverified", "file_count": 0}
         
         bot_deep_link = f'https://telegram.dog/{bot_username}?start=token_{token}'
-        external_shortened_url = await shorten_url(bot_deep_link)
-
+        
         flask_gate_link = (
             f"{FLASK_APP_BASE_URL}/gate?"
-            f"redirect_to_shortener={urllib.parse.quote_plus(external_shortened_url)}"
+            f"bot_deep_link={urllib.parse.quote_plus(bot_deep_link)}"
         )
         
         button1 = InlineKeyboardButton("🎟️ Get Token", url=flask_gate_link)

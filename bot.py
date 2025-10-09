@@ -13,7 +13,7 @@ from config import *
 from utils import *
 from tmdb import get_by_name
 from shorterner import shorten_url
-from database import add_user, del_user, full_userbase, present_user
+from database import add_user, del_user, full_userbase, present_user, ban_user, is_user_banned
 import urllib.parse # Added: For URL encoding
 
 uvloop.install()
@@ -47,6 +47,10 @@ async def start_command(client, message):
                 await add_user(user_id)
             except:
                 pass
+        
+        if await is_user_banned(user_id):
+            await message.reply_text("You are currently banned from using this bot. Please try again later.")
+            return
 
         user_link = await get_user_link(message.from_user)
 
@@ -71,13 +75,17 @@ async def start_command(client, message):
                     inittime = user_data[user_id]['inittime']
                     duration = tm() - inittime
                     if MINIMUM_DURATION and (duration < MINIMUM_DURATION):
+                        
+                        # Ban user for 1 day (86400 seconds)
+                        await ban_user(user_id, 86400)
+                        
                         user_data[user_id]['status'] = "unverified"
                         user_data[user_id]['time'] = 0
                         user_data[user_id]['file_count'] = 0
                         
                         log_message = (
                             f"User🕵️‍♂️{user_link} with 🆔 {user_id} @{bot_username} "
-                            f"attempted token bypass! ❌\n"
+                            f"attempted token bypass! ❌ **BANNED for 1 Day**\n"
                             f"Time taken: {duration:.2f} seconds (Min required: {MINIMUM_DURATION} seconds)\n"
                             f"Token: `{input_token}`"
                         )
@@ -86,11 +94,9 @@ async def start_command(client, message):
                         warning_message = (
                             f"**Bypass Detected! 🚨**\n\n"
                             f"It seems you tried to bypass the token verification process. "
-                            f"This is strictly prohibited and can lead to a permanent ban. "
-                            f"Your token has been invalidated.\n\n"
+                            f"This is strictly prohibited and has resulted in a **1-Day Ban** from the bot.\n\n"
                             f"**Do NOT attempt this again.** "
-                            f"Please generate a new token and follow the instructions carefully. "
-                            f"Repeated attempts will result in a permanent ban without warning."
+                            f"Your token has been invalidated. You will be able to use the bot again after 24 hours."
                         )
                         reply = await safe_api_call(message.reply_text(warning_message))
                         await auto_delete_message(message, reply)

@@ -19,7 +19,7 @@ from database import (
 )
 import urllib.parse
 
-uvloop.install()
+# uvloop.install() # This is causing a conflict with gunicorn
 
 # Define an async queue to handle messages sequentially
 message_queue = Queue()

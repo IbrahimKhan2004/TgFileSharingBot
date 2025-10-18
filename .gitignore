@@ -1,0 +1,17 @@
+# Environment
+config.env
+.env
+
+# Logs
+*.log
+log.txt
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+env/
+venv/
+.venv/

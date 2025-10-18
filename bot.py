@@ -16,7 +16,7 @@ from shorterner import shorten_url
 from database import add_user, del_user, full_userbase, present_user, ban_user, is_user_banned
 import urllib.parse # Added: For URL encoding
 
-uvloop.install()
+# uvloop.install()
 
 # Define an async queue to handle messages sequentially
 message_queue = Queue()

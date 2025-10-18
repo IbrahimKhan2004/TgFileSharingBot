@@ -1,7 +1,10 @@
 #!/bin/bash
 
-# Start the bot in the background
-python3 bot.py &
+echo "--- Starting Bot Process ---"
+python3 bot.py > bot.log 2>&1 &
 
-# Start the Gunicorn web server in the foreground
+echo "--- Waiting for Bot to Initialize (5s) ---"
+sleep 5
+
+echo "--- Starting Web Process ---"
 gunicorn app:app --workers 1 --threads 1 --bind 0.0.0.0:${PORT:-8080} --timeout 86400

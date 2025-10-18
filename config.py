@@ -49,6 +49,7 @@ API_ID = int(os.getenv('API_ID'))
 API_HASH = os.getenv('API_HASH')
 BOT_TOKEN = os.getenv('BOT_TOKEN')
 OWNER_ID = int(os.getenv('OWNER_ID'))
+BOT_USERNAME = os.getenv('BOT_USERNAME')
 
 DB_CHANNEL_ID = int(os.getenv('DB_CHANNEL_ID'))
 LOG_CHANNEL_ID = int(os.getenv('LOG_CHANNEL_ID'))
@@ -71,3 +72,7 @@ URLSHORTX_API_TOKEN = os.getenv('URLSHORTX_API_TOKEN')
 SHORTERNER_URL = os.getenv('SHORTERNER_URL')
 TOKEN_TIMEOUT = int(os.getenv('TOKEN_TIMEOUT'))
 MINIMUM_DURATION = int(os.getenv('MINIMUM_DURATION', '0')) # Added: Minimum duration for token verification
+
+# HCAPTCHA - GET THESE FROM hcaptcha.com (KEEP THE SECRET KEY PRIVATE)
+HCAPTCHA_SITE_KEY = os.getenv('HCAPTCHA_SITE_KEY', '10000000-ffff-ffff-ffff-000000000001') # Public dummy key
+HCAPTCHA_SECRET_KEY = os.getenv('HCAPTCHA_SECRET_KEY', '0x0000000000000000000000000000000000000000') # Private dummy key

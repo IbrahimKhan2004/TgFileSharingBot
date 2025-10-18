@@ -16,7 +16,9 @@ from shorterner import shorten_url
 from database import add_user, del_user, full_userbase, present_user, ban_user, is_user_banned
 import urllib.parse # Added: For URL encoding
 
-# uvloop.install()
+asyncio.set_event_loop_policy(uvloop.EventLoopPolicy())
+loop = asyncio.new_event_loop()
+asyncio.set_event_loop(loop)
 
 # Define an async queue to handle messages sequentially
 message_queue = Queue()

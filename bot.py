@@ -19,6 +19,7 @@ from database import (
     get_bypass_attempts, increment_bypass_attempts,
     update_user_data, get_user_data, increment_file_count, load_all_user_data
 )
+import urllib.parse # ADDED: Required for urllib.parse.quote_plus
 
 asyncio.set_event_loop_policy(uvloop.EventLoopPolicy())
 loop = asyncio.new_event_loop()

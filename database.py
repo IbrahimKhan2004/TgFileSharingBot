@@ -13,8 +13,63 @@ async def present_user(user_id : int):
     return bool(found)
 
 async def add_user(user_id: int):
-    user_data.insert_one({'_id': user_id, 'bypass_attempts': 0})
+    user_data.insert_one({
+        '_id': user_id,
+        'bypass_attempts': 0,
+        'token': None,
+        'time': 0,
+        'status': 'unverified',
+        'file_count': 0,
+        'inittime': 0
+    })
     return
+
+async def update_user_data(user_id: int, data: dict):
+    """Updates the user's data document."""
+    valid_fields = ['token', 'time', 'status', 'file_count', 'inittime']
+    update_doc = {k: v for k, v in data.items() if k in valid_fields}
+    if update_doc:
+        user_data.update_one(
+            {'_id': user_id},
+            {'$set': update_doc},
+            upsert=True
+        )
+    return
+
+async def get_user_data(user_id: int):
+    """Gets the user's data."""
+    user = user_data.find_one({'_id': user_id})
+    if user:
+        return {
+            'token': user.get('token'),
+            'time': user.get('time', 0),
+            'status': user.get('status', 'unverified'),
+            'file_count': user.get('file_count', 0),
+            'inittime': user.get('inittime', 0)
+        }
+    return None
+
+async def increment_file_count(user_id: int):
+    """Increments the file count for a user."""
+    user_data.update_one(
+        {'_id': user_id},
+        {'$inc': {'file_count': 1}}
+    )
+    return
+
+async def load_all_user_data():
+    """Loads all user data from the database."""
+    all_users = user_data.find({})
+    all_user_data = {}
+    for user in all_users:
+        all_user_data[user['_id']] = {
+            'token': user.get('token'),
+            'time': user.get('time', 0),
+            'status': user.get('status', 'unverified'),
+            'file_count': user.get('file_count', 0),
+            'inittime': user.get('inittime', 0)
+        }
+    return all_user_data
 
 async def full_userbase():
     user_docs = user_data.find()

@@ -13,7 +13,7 @@ from config import *
 from utils import *
 from tmdb import get_by_name
 from shorterner import shorten_url
-from database import add_user, del_user, full_userbase, present_user, ban_user, is_user_banned
+from database import add_user, del_user, full_userbase, present_user, ban_user, is_user_banned, unban_user, get_bypass_attempts, increment_bypass_attempts
 import urllib.parse # Added: For URL encoding
 
 asyncio.set_event_loop_policy(uvloop.EventLoopPolicy())
@@ -77,9 +77,40 @@ async def start_command(client, message):
                     inittime = user_data[user_id]['inittime']
                     duration = tm() - inittime
                     if MINIMUM_DURATION and (duration < MINIMUM_DURATION):
-                        
-                        # Ban user for 1 day (86400 seconds)
-                        await ban_user(user_id, 86400)
+                        await increment_bypass_attempts(user_id)
+                        attempts = await get_bypass_attempts(user_id)
+
+                        ban_duration = 0
+                        ban_message = ""
+
+                        if attempts == 1:
+                            # 1st bypass: Warning
+                            warning_message = (
+                                f"**First Warning! ⚠️**\n\n"
+                                f"This is your first warning for attempting to bypass the verification process. "
+                                f"Please follow the proper steps. Further attempts will result in a ban."
+                            )
+                            reply = await safe_api_call(message.reply_text(warning_message))
+                            await auto_delete_message(message, reply)
+                            return
+                        elif attempts == 2:
+                            # 2nd bypass: 15-minute ban
+                            ban_duration = 15 * 60  # 15 minutes
+                            ban_message = "BANNED for 15 Minutes"
+                        elif attempts == 3:
+                            # 3rd bypass: 1-hour ban
+                            ban_duration = 60 * 60  # 1 hour
+                            ban_message = "BANNED for 1 Hour"
+                        elif attempts == 4:
+                            # 4th bypass: 12-hour ban
+                            ban_duration = 12 * 60 * 60  # 12 hours
+                            ban_message = "BANNED for 12 Hours"
+                        else:
+                            # 5th or more bypass: 1-day ban
+                            ban_duration = 24 * 60 * 60  # 1 day
+                            ban_message = "BANNED for 1 Day"
+
+                        await ban_user(user_id, ban_duration)
                         
                         user_data[user_id]['status'] = "unverified"
                         user_data[user_id]['time'] = 0
@@ -87,7 +118,7 @@ async def start_command(client, message):
                         
                         log_message = (
                             f"User🕵️‍♂️{user_link} with 🆔 {user_id} @{bot_username} "
-                            f"attempted token bypass! ❌ **BANNED for 1 Day**\n"
+                            f"attempted token bypass! ❌ **{ban_message}** (Attempt: {attempts})\n"
                             f"Time taken: {duration:.2f} seconds (Min required: {MINIMUM_DURATION} seconds)\n"
                             f"Token: `{input_token}`"
                         )
@@ -95,10 +126,8 @@ async def start_command(client, message):
                         
                         warning_message = (
                             f"**Bypass Detected! 🚨**\n\n"
-                            f"It seems you tried to bypass the token verification process. "
-                            f"This is strictly prohibited and has resulted in a **1-Day Ban** from the bot.\n\n"
-                            f"**Do NOT attempt this again.** "
-                            f"Your token has been invalidated. You will be able to use the bot again after 24 hours."
+                            f"You have been **{ban_message}** for repeatedly attempting to bypass the verification process. "
+                            f"Your token has been invalidated."
                         )
                         reply = await safe_api_call(message.reply_text(warning_message))
                         await auto_delete_message(message, reply)
@@ -278,6 +307,26 @@ async def log_command(client, message):
         await auto_delete_message(message, reply)
     except Exception as e:
         await bot.send_message(user_id, f"Failed to send log file. Error: {str(e)}")
+
+@bot.on_message(filters.private & filters.command("unban") & filters.user(OWNER_ID))
+async def unban_command(client, message):
+    try:
+        if len(message.command) > 1:
+            user_id_to_unban = int(message.command[1])
+            await unban_user(user_id_to_unban)
+            await message.reply_text(f"User {user_id_to_unban} has been unbanned.")
+
+            # Notify the unbanned user
+            await bot.send_message(
+                user_id_to_unban,
+                "You have been unbanned by the admin. You can now use the bot again."
+            )
+        else:
+            await message.reply_text("Please provide a user ID to unban. Usage: /unban USER_ID")
+    except ValueError:
+        await message.reply_text("Invalid user ID format.")
+    except Exception as e:
+        await message.reply_text(f"An error occurred: {e}")
 
 async def process_queue():
     while True:

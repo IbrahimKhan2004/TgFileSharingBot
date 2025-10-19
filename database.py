@@ -26,7 +26,7 @@ async def add_user(user_id: int):
 
 async def update_user_data(user_id: int, data: dict):
     """Updates the user's data document."""
-    valid_fields = ['token', 'time', 'status', 'file_count', 'inittime']
+    valid_fields = ['token', 'time', 'status', 'file_count', 'inittime', 'bypass_attempts']
     update_doc = {k: v for k, v in data.items() if k in valid_fields}
     if update_doc:
         user_data.update_one(
@@ -45,7 +45,8 @@ async def get_user_data(user_id: int):
             'time': user.get('time', 0),
             'status': user.get('status', 'unverified'),
             'file_count': user.get('file_count', 0),
-            'inittime': user.get('inittime', 0)
+            'inittime': user.get('inittime', 0),
+            'bypass_attempts': user.get('bypass_attempts', 0)
         }
     return None
 
@@ -67,7 +68,8 @@ async def load_all_user_data():
             'time': user.get('time', 0),
             'status': user.get('status', 'unverified'),
             'file_count': user.get('file_count', 0),
-            'inittime': user.get('inittime', 0)
+            'inittime': user.get('inittime', 0),
+            'bypass_attempts': user.get('bypass_attempts', 0)
         }
     return all_user_data
 

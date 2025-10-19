@@ -308,6 +308,31 @@ async def get_users(client, message):
     users = await full_userbase()
     await msg.edit(f"{len(users)} users are using this bot")
 
+@bot.on_message(filters.command('stats') & filters.private & filters.user(OWNER_ID))
+async def get_stats(client, message):
+    msg = await client.send_message(chat_id=message.chat.id, text="Gathering statistics...")
+
+    # Get total users from the database
+    users = await full_userbase()
+    total_users = len(users)
+
+    # Calculate current verified users from local cache (approximation)
+    verified_users = sum(1 for data in user_data.values() if data.get('status') == 'verified')
+    
+    # Calculate total files shared today (since last bot start and token refresh)
+    files_shared = sum(data.get('file_count', 0) for data in user_data.values())
+
+    stats_text = (
+        "📊 <b>BOT STATISTICS</b> 📊\n\n"
+        f"<b>Total Users:</b> <code>{total_users}</code>\n"
+        f"<b>Verified Users (Active):</b> <code>{verified_users}</code>\n"
+        f"<b>Total Files Shared:</b> <code>{files_shared}</code>\n"
+        f"<b>Token Timeout:</b> <code>{get_readable_time(TOKEN_TIMEOUT)}</code>\n"
+        f"<b>Daily File Limit:</b> <code>{DAILY_LIMIT}</code> files"
+    )
+
+    await msg.edit(stats_text)
+
 @bot.on_message(filters.command("log") & filters.user(OWNER_ID))
 async def log_command(client, message):
     user_id = message.from_user.id

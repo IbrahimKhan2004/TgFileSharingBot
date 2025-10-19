@@ -13,8 +13,12 @@ from config import *
 from utils import *
 from tmdb import get_by_name
 from shorterner import shorten_url
-from database import add_user, del_user, full_userbase, present_user, ban_user, is_user_banned, unban_user, get_bypass_attempts, increment_bypass_attempts
-import urllib.parse # Added: For URL encoding
+from database import (
+    add_user, del_user, full_userbase, present_user,
+    ban_user, is_user_banned, unban_user,
+    get_bypass_attempts, increment_bypass_attempts,
+    update_user_data, get_user_data, increment_file_count, load_all_user_data
+)
 
 asyncio.set_event_loop_policy(uvloop.EventLoopPolicy())
 loop = asyncio.new_event_loop()
@@ -26,6 +30,11 @@ message_queue = Queue()
 user_data = {}
 
 # PROGRAM BOT INITIALIZATION 
+
+async def load_initial_data():
+    global user_data
+    user_data = await load_all_user_data()
+    logger.info("Successfully loaded all user data from the database.")
 
 bot = Client(
     "bot",
@@ -112,10 +121,10 @@ async def start_command(client, message):
 
                         await ban_user(user_id, ban_duration)
                         
-                        user_data[user_id]['status'] = "unverified"
-                        user_data[user_id]['time'] = 0
-                        user_data[user_id]['file_count'] = 0
-                        
+                        # Reset user data in database after banning
+                        await update_user_data(user_id, {'status': 'unverified', 'time': 0, 'file_count': 0})
+                        user_data[user_id] = await get_user_data(user_id) # Refresh local cache
+
                         log_message = (
                             f"User🕵️‍♂️{user_link} with 🆔 {user_id} @{bot_username} "
                             f"attempted token bypass! ❌ **{ban_message}** (Attempt: {attempts})\n"
@@ -149,7 +158,8 @@ async def start_command(client, message):
             if media:
                 caption = await remove_extension(file_message.caption.html or "")
                 copy_message = await safe_api_call(file_message.copy(chat_id=message.chat.id, caption=f"<b>{caption}</b>", parse_mode=enums.ParseMode.HTML))
-                user_data[user_id]['file_count'] = user_data[user_id].get('file_count', 0) + 1
+                await increment_file_count(user_id)
+                user_data[user_id]['file_count'] += 1
                 await auto_delete_message(message, copy_message)
             else:
                 await auto_delete_message(message, await message.reply_text("File not found or inaccessible."))
@@ -427,57 +437,71 @@ async def restart(client, message):
 
 async def verify_token(user_id, input_token):
     current_time = tm()
-
-    # Check if the user_id exists in user_data
-    if user_id not in user_data:
-        return 'Token Mismatched ❌' 
     
-    stored_token = user_data[user_id]['token']
+    # Get user data from local cache or DB
+    udata = user_data.get(user_id)
+    if not udata:
+        udata = await get_user_data(user_id)
+        if not udata:
+            return 'Token Mismatched ❌'
+        user_data[user_id] = udata
+
+    stored_token = udata.get('token')
     if input_token == stored_token:
-        token = str(uuid.uuid4())
-        user_data[user_id] = {"token": token, "time": current_time, "status": "verified", "file_count": 0, "inittime": current_time}
+        new_token = str(uuid.uuid4())
+        new_data = {"token": new_token, "time": current_time, "status": "verified", "file_count": 0, "inittime": current_time}
+        await update_user_data(user_id, new_data)
+        user_data[user_id] = {**udata, **new_data} # Update local cache
         return f'Token Verified ✅ (Validity: {get_readable_time(TOKEN_TIMEOUT)})'
     else:
         return f'Token Mismatched ❌'
-    
+
 async def check_access(message, user_id):
-    if user_id in user_data:
-        time = user_data[user_id]['time']
-        status = user_data[user_id]['status']
-        file_count = user_data[user_id].get('file_count', 0)
-        expiry = time + TOKEN_TIMEOUT
-        current_time = tm()
-        if current_time < expiry and status == "verified":
-            if file_count < DAILY_LIMIT:
-                return True
-            else:
-                reply = await message.reply_text(f"You have reached the limit. Please wait until the token expires")
-                await auto_delete_message(message, reply)
-                return False
-        else:
-            button = await update_token(user_id)
+    udata = user_data.get(user_id)
+    if not udata:
+        udata = await get_user_data(user_id)
+        if not udata:
+            # This case happens for new users who are not in the DB yet
+            button = await genrate_token(user_id)
             send_message = await message.reply_text( 
-                                                    text=f"👋 Welcome! Please renew your token now using the link below to access your files instantly. 🚀", 
+                                                    text=f"👋 Welcome! Please get a token to access files. 🚀",
                                                     reply_markup=button
                                                     )
             await auto_delete_message(message, send_message)
             return False
+        user_data[user_id] = udata
+
+    time = udata.get('time', 0)
+    status = udata.get('status', 'unverified')
+    file_count = udata.get('file_count', 0)
+
+    expiry = time + TOKEN_TIMEOUT
+    current_time = tm()
+
+    if current_time < expiry and status == "verified":
+        if file_count < DAILY_LIMIT:
+            return True
+        else:
+            reply = await message.reply_text(f"You have reached the daily limit. Please wait until the token expires.")
+            await auto_delete_message(message, reply)
+            return False
     else:
-        button = await genrate_token(user_id)
+        button = await update_token(user_id)
         send_message = await message.reply_text( 
-                                                text=f"👋 Welcome! Please renew your token now using the link below to access your files instantly. 🚀", 
+                                                text=f"👋 Your token has expired. Please get a new token to continue. 🚀",
                                                 reply_markup=button
-                                                )     
-           
+                                                )
         await auto_delete_message(message, send_message)
         return False
-    
+
 async def update_token(user_id):
     try:
         token = str(uuid.uuid4())
         current_time = tm()
-        user_data[user_id] = {"token": token, "time": current_time, "status": "unverified", "file_count": 0, "inittime": current_time}
-        
+        new_data = {"token": token, "time": current_time, "status": "unverified", "file_count": 0, "inittime": current_time}
+        await update_user_data(user_id, new_data)
+        user_data[user_id] = {**user_data.get(user_id, {}), **new_data} # Update local cache
+
         # 1. Create the deep link URL for the bot
         bot_deep_link = f'https://telegram.dog/{bot_username}?start=token_{token}'
         
@@ -503,7 +527,9 @@ async def genrate_token(user_id):
     try:
         token = str(uuid.uuid4())
         current_time = tm()
-        user_data[user_id] = {"token": token, "time": current_time, "status": "unverified", "file_count": 0, "inittime": current_time}
+        new_data = {"token": token, "time": current_time, "status": "unverified", "file_count": 0, "inittime": current_time}
+        await update_user_data(user_id, new_data)
+        user_data[user_id] = {**user_data.get(user_id, {}), **new_data} # Update local cache
         
         bot_deep_link = f'https://telegram.dog/{bot_username}?start=token_{token}'
         external_shortened_url = await shorten_url(bot_deep_link)
@@ -553,14 +579,17 @@ async def get_user_link(user: User) -> str:
         return first_name
 
 async def main():
+    await load_initial_data()
     await asyncio.create_task(process_queue())
     await asyncio.Event().wait()
 
 if __name__ == "__main__":
     logging.basicConfig(level=logging.INFO)
+
     bot.send_message(LOG_CHANNEL_ID,"Bot Started ✅")
     
     try:
+        # The bot is already started by Client(), so we just run the main loop
         bot.loop.run_until_complete(main())
         bot.loop.run_forever()
     except KeyboardInterrupt:

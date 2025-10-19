@@ -13,7 +13,7 @@ async def present_user(user_id : int):
     return bool(found)
 
 async def add_user(user_id: int):
-    user_data.insert_one({'_id': user_id})
+    user_data.insert_one({'_id': user_id, 'bypass_attempts': 0})
     return
 
 async def full_userbase():
@@ -38,6 +38,34 @@ async def ban_user(user_id: int, ban_duration: int):
     )
     return
 
+async def unban_user(user_id: int):
+    """Unbans a user."""
+    banned_users.delete_one({'_id': user_id})
+    await reset_bypass_attempts(user_id)
+    return
+
+async def get_bypass_attempts(user_id: int):
+    """Gets the number of bypass attempts for a user."""
+    user = user_data.find_one({'_id': user_id})
+    return user.get('bypass_attempts', 0) if user else 0
+
+async def increment_bypass_attempts(user_id: int):
+    """Increments the bypass attempts for a user."""
+    user_data.update_one(
+        {'_id': user_id},
+        {'$inc': {'bypass_attempts': 1}},
+        upsert=True
+    )
+    return
+
+async def reset_bypass_attempts(user_id: int):
+    """Resets the bypass attempts for a user to 0."""
+    user_data.update_one(
+        {'_id': user_id},
+        {'$set': {'bypass_attempts': 0}}
+    )
+    return
+
 async def is_user_banned(user_id: int):
     """Checks if a user is currently banned."""
     user = banned_users.find_one({'_id': user_id})
@@ -48,5 +76,6 @@ async def is_user_banned(user_id: int):
         else:
             # Ban expired, remove from banned_users collection
             banned_users.delete_one({'_id': user_id})
+            await reset_bypass_attempts(user_id)
             return False
     return False

@@ -17,7 +17,8 @@ from database import (
     add_user, del_user, full_userbase, present_user,
     ban_user, is_user_banned, unban_user,
     get_bypass_attempts, increment_bypass_attempts,
-    update_user_data, get_user_data, increment_file_count, load_all_user_data
+    update_user_data, get_user_data, increment_file_count, load_all_user_data,
+    daily_reset_stats
 )
 import urllib.parse # ADDED: Required for urllib.parse.quote_plus
 
@@ -312,6 +313,12 @@ async def get_users(client, message):
 @bot.on_message(filters.command('stats') & filters.private & filters.user(OWNER_ID))
 async def get_stats(client, message):
     msg = await client.send_message(chat_id=message.chat.id, text="Gathering statistics...")
+
+    # Check for and perform daily reset
+    if await daily_reset_stats():
+        global user_data
+        user_data = await load_all_user_data() # Reload data after reset
+        await client.send_message(LOG_CHANNEL_ID, "Daily stats reset performed successfully.")
 
     # Get total users from the database
     users = await full_userbase()

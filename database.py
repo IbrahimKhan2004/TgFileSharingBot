@@ -1,12 +1,14 @@
 import pymongo
 from config import MONGO_URI, MONGO_DB_NAME
 from time import time as tm
+from datetime import datetime, timedelta, timezone
 
 dbclient = pymongo.MongoClient(MONGO_URI)
 database = dbclient[MONGO_DB_NAME]
 
 user_data = database['users']
 banned_users = database['banned_users']
+daily_stats = database['daily_stats']
 
 async def present_user(user_id : int):
     found = user_data.find_one({'_id': user_id})
@@ -135,4 +137,39 @@ async def is_user_banned(user_id: int):
             banned_users.delete_one({'_id': user_id})
             await reset_bypass_attempts(user_id)
             return False
+    return False
+
+async def daily_reset_stats():
+    """Resets daily stats (file_count, status, time, inittime) for all users if a day has passed."""
+    
+    # Get last reset time
+    stats_doc = daily_stats.find_one({'_id': 'daily_reset'})
+    last_reset_timestamp = stats_doc.get('last_reset', 0) if stats_doc else 0
+    
+    # Convert timestamp to datetime object (assuming UTC for consistency)
+    last_reset_date = datetime.fromtimestamp(last_reset_timestamp, tz=timezone.utc).date()
+    current_date = datetime.now(timezone.utc).date()
+
+    if current_date > last_reset_date:
+        # Perform the reset
+        user_data.update_many(
+            {},
+            {
+                '$set': {
+                    'file_count': 0,
+                    'status': 'unverified',
+                    'time': 0,
+                    'inittime': 0
+                }
+            }
+        )
+        
+        # Update last reset time
+        new_reset_timestamp = tm()
+        daily_stats.update_one(
+            {'_id': 'daily_reset'},
+            {'$set': {'last_reset': new_reset_timestamp}},
+            upsert=True
+        )
+        return True
     return False

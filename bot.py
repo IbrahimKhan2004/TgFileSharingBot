@@ -21,6 +21,7 @@ from database import (
     daily_reset_stats
 )
 import urllib.parse # ADDED: Required for urllib.parse.quote_plus
+from datetime import datetime, timedelta, timezone
 
 asyncio.set_event_loop_policy(uvloop.EventLoopPolicy())
 loop = asyncio.new_event_loop()
@@ -314,12 +315,6 @@ async def get_users(client, message):
 async def get_stats(client, message):
     msg = await client.send_message(chat_id=message.chat.id, text="Gathering statistics...")
 
-    # Check for and perform daily reset
-    if await daily_reset_stats():
-        global user_data
-        user_data = await load_all_user_data() # Reload data after reset
-        await client.send_message(LOG_CHANNEL_ID, "Daily stats reset performed successfully.")
-
     # Get total users from the database
     users = await full_userbase()
     total_users = len(users)
@@ -611,9 +606,25 @@ async def get_user_link(user: User) -> str:
     else:
         return first_name
 
+async def daily_reset_scheduler():
+    global user_data
+    while True:
+        now = datetime.now(timezone.utc)
+        # Calculate time until next midnight (00:00 UTC)
+        next_midnight = now.replace(hour=0, minute=0, second=0, microsecond=0) + timedelta(days=1)
+        sleep_duration = (next_midnight - now).total_seconds()
+        
+        logger.info(f"Daily reset scheduled to run in {sleep_duration:.0f} seconds.")
+        await asyncio.sleep(sleep_duration) 
+        
+        if await daily_reset_stats():
+            user_data = await load_all_user_data() # Reload data after reset
+            await bot.send_message(LOG_CHANNEL_ID, "Daily stats reset performed successfully by scheduler.")
+
 async def main():
     await load_initial_data()
     await asyncio.create_task(process_queue())
+    await asyncio.create_task(daily_reset_scheduler())
     await asyncio.Event().wait()
 
 if __name__ == "__main__":

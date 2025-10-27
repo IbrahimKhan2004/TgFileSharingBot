@@ -159,6 +159,7 @@ async def daily_reset_stats():
                     'file_count': 0,
                     'status': 'unverified',
                     'time': 0,
+                    'bypass_attempts': 0,
                     'inittime': 0
                 }
             }

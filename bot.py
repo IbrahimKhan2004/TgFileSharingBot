@@ -609,6 +609,11 @@ async def get_user_link(user: User) -> str:
 async def daily_reset_scheduler():
     global user_data
     while True:
+        # Run reset immediately on startup if needed
+        if await daily_reset_stats():
+            user_data = await load_all_user_data() # Reload data after reset
+            await bot.send_message(LOG_CHANNEL_ID, "Daily stats reset performed successfully by scheduler.")
+
         now = datetime.now(timezone.utc)
         # Calculate time until next midnight (00:00 UTC)
         next_midnight = now.replace(hour=0, minute=0, second=0, microsecond=0) + timedelta(days=1)
@@ -616,10 +621,6 @@ async def daily_reset_scheduler():
         
         logger.info(f"Daily reset scheduled to run in {sleep_duration:.0f} seconds.")
         await asyncio.sleep(sleep_duration) 
-        
-        if await daily_reset_stats():
-            user_data = await load_all_user_data() # Reload data after reset
-            await bot.send_message(LOG_CHANNEL_ID, "Daily stats reset performed successfully by scheduler.")
 
 async def main():
     await load_initial_data()

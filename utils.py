@@ -27,7 +27,7 @@ async def remove_extension(caption):
 async def auto_delete_message(user_message, bot_message):
     try:
         await user_message.delete()
-        await asyncio.sleep(180)
+        await asyncio.sleep(65)
         await bot_message.delete()
     except Exception as e:
         logger.error(f"{e}")

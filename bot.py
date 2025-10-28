@@ -270,22 +270,36 @@ async def send_text(client, message):
         unsuccessful = 0
         
         pls_wait = await message.reply("<i>Broadcasting Message.. This will Take Some Time</i>")
+        logger.info(f"Starting broadcast to {len(query)} users.")
+        
+        progress_interval = 25 
+
         for chat_id in query:
+            if total > 0 and total % progress_interval == 0:
+                logger.info(
+                    f"Broadcast progress: Sent to {total}/{len(query)} users. "
+                    f"Successful: {successful}, Blocked: {blocked}, Deleted: {deleted}, Unsuccessful: {unsuccessful}"
+                )
+
             try:
                 await asyncio.sleep(3)
                 await broadcast_msg.copy(chat_id)
                 successful += 1
             except FloodWait as e:
+                logger.warning(f"FloodWait: Sleeping for {e.x} seconds.")
                 await asyncio.sleep(e.x)
                 await broadcast_msg.copy(chat_id)
                 successful += 1
             except UserIsBlocked:
+                logger.info(f"User {chat_id} is blocked. Removing from DB.")
                 await del_user(chat_id)
                 blocked += 1
             except InputUserDeactivated:
+                logger.info(f"User {chat_id} is deactivated. Removing from DB.")
                 await del_user(chat_id)
                 deleted += 1
-            except:
+            except Exception as e:
+                logger.error(f"Failed to send message to {chat_id}: {e}")
                 unsuccessful += 1
                 pass
             total += 1
@@ -297,6 +311,8 @@ Successful: <code>{successful}</code>
 Blocked Users: <code>{blocked}</code>
 Deleted Accounts: <code>{deleted}</code>
 Unsuccessful: <code>{unsuccessful}</code></b>"""
+
+        logger.info(f"Broadcast finished. Summary: Total={total}, Successful={successful}, Blocked={blocked}, Deleted={deleted}, Unsuccessful={unsuccessful}")
         
         return await pls_wait.edit(status)
 

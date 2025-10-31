@@ -1,7 +1,8 @@
 FROM python:3.10.13-slim
 WORKDIR /app
 
-RUN apt-get update && apt-get install -y git
+-RUN apt-get update && apt-get install -y git
++RUN apt-get update && apt-get install -y git tzdata
 
 COPY requirements.txt requirements.txt
 RUN pip3 install -r requirements.txt

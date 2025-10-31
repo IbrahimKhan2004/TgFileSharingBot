@@ -2,6 +2,7 @@ import pymongo
 from config import MONGO_URI, MONGO_DB_NAME
 from time import time as tm
 from datetime import datetime, timedelta, timezone
+from zoneinfo import ZoneInfo # ADDED: For robust timezone handling
 
 dbclient = pymongo.MongoClient(MONGO_URI)
 database = dbclient[MONGO_DB_NAME]
@@ -142,13 +143,14 @@ async def is_user_banned(user_id: int):
 async def daily_reset_stats():
     """Resets daily stats (file_count, status, time, inittime) for all users if a day has passed."""
     
+    TZ_IST = ZoneInfo("Asia/Kolkata")
     # Get last reset time
     stats_doc = daily_stats.find_one({'_id': 'daily_reset'})
     last_reset_timestamp = stats_doc.get('last_reset', 0) if stats_doc else 0
     
     # Convert timestamp to datetime object (assuming UTC for consistency)
-    last_reset_date = datetime.fromtimestamp(last_reset_timestamp, tz=timezone.utc).date()
-    current_date = datetime.now(timezone.utc).date()
+    last_reset_date = datetime.fromtimestamp(last_reset_timestamp, tz=TZ_IST).date() 
+    current_date = datetime.now(TZ_IST).date()
 
     if current_date > last_reset_date:
         # Perform the reset

@@ -22,6 +22,7 @@ from database import (
 )
 import urllib.parse # ADDED: Required for urllib.parse.quote_plus
 from datetime import datetime, timedelta, timezone
+from zoneinfo import ZoneInfo # ADDED: For robust timezone handling
 
 asyncio.set_event_loop_policy(uvloop.EventLoopPolicy())
 loop = asyncio.new_event_loop()
@@ -179,7 +180,7 @@ async def start_command(client, message):
         await auto_delete_message(message, await message.reply_text(f"An error occurred: {e}"))
 
 
-@bot.on_message(filters.chat(DB_CHANNEL_ID) & (filters.document | filters.video |filters.audio | filters.sticker))
+@bot.on_message(filters.chat(DB_CHANNEL_ID) & (filters.document | filters.video | filters.audio | filters.sticker))
 async def handle_new_message(client, message):
     # Add the message to the queue for sequential processing
     await message_queue.put(message)
@@ -633,9 +634,11 @@ async def daily_reset_scheduler():
             user_data = await load_all_user_data() # Reload data after reset
             await bot.send_message(LOG_CHANNEL_ID, "Daily stats reset performed successfully by scheduler.")
 
-        now = datetime.now(timezone.utc)
-        # Calculate time until next midnight (00:00 UTC)
-        next_midnight = now.replace(hour=0, minute=0, second=0, microsecond=0) + timedelta(days=1)
+        # Use ZoneInfo for Asia/Kolkata (IST)
+        TZ_IST = ZoneInfo("Asia/Kolkata")
+        now = datetime.now(TZ_IST)
+        # Calculate time until next midnight (00:00 IST)
+        next_midnight = now.replace(hour=0, minute=0, second=0, microsecond=0, tzinfo=TZ_IST) + timedelta(days=1)
         sleep_duration = (next_midnight - now).total_seconds()
         
         logger.info(f"Daily reset scheduled to run in {sleep_duration:.0f} seconds.")

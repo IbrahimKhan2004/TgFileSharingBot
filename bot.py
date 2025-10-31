@@ -402,7 +402,10 @@ async def process_message(client, message):
         file_size = humanbytes(media.file_size)
         if message.video:
             duration = TimeFormatter(media.duration * 1000)
-            thumbnail = await safe_api_call(bot.download_media(media.thumbs[0].file_id))
+            if media.thumbs:
+                thumbnail = await safe_api_call(bot.download_media(media.thumbs[0].file_id))
+            else:
+                thumbnail = None
         else:
             duration = ""
         if not message.audio: 

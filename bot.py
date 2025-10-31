@@ -7,7 +7,7 @@ from asyncio import create_subprocess_exec, gather
 from pyrogram.types import User
 from pyrogram import Client, enums, filters
 from pyrogram.types import InlineKeyboardMarkup, InlineKeyboardButton
-from pyrogram.errors import FloodWait, UserIsBlocked, InputUserDeactivated, WebpageCurlFailed, WebpageMediaEmpty
+from pyrogram.errors import FloodWait, UserIsBlocked, InputUserDeactivated, WebpageCurlFailed, WebpageMediaEmpty, MessageNotModified
 from asyncio import Queue
 from config import *
 from utils import *
@@ -351,7 +351,10 @@ async def get_stats(client, message):
         f"<b>Daily File Limit:</b> <code>{DAILY_LIMIT}</code> files"
     )
 
-    await msg.edit(stats_text)
+    try:
+        await msg.edit(stats_text)
+    except MessageNotModified:
+        pass # Ignore if the message content is the same
 
 @bot.on_message(filters.command("log") & filters.user(OWNER_ID))
 async def log_command(client, message):

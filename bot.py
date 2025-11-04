@@ -187,14 +187,24 @@ async def handle_new_message(client, message):
     
 @bot.on_deleted_messages(filters.chat(DB_CHANNEL_ID))
 async def deleted_messages_handler(client, messages):
+    logger.info(f"Deletion detected in DB_CHANNEL for {len(messages)} message(s).")
     for message in messages:
-        mapped_message_id = get_mapped_message_id(message.id)
+        db_message_id = message.id
+        logger.info(f"Processing deleted DB channel message with ID: {db_message_id}")
+        
+        mapped_message_id = get_mapped_message_id(db_message_id)
+        
         if mapped_message_id:
+            logger.info(f"Found mapping: DB ID {db_message_id} -> UPDATE ID {mapped_message_id}. Attempting to delete.")
             try:
                 await bot.delete_messages(UPDATE_CHANNEL_ID, mapped_message_id)
-                delete_message_map(message.id)
+                logger.info(f"Successfully deleted message {mapped_message_id} from UPDATE_CHANNEL.")
+                delete_message_map(db_message_id)
+                logger.info(f"Successfully deleted mapping for DB ID {db_message_id}.")
             except Exception as e:
                 logger.error(f"Error deleting message {mapped_message_id} from UPDATE_CHANNEL_ID: {e}")
+        else:
+            logger.warning(f"No mapping found for deleted DB channel message ID: {db_message_id}. Cannot delete from update channel.")
 
 
 @bot.on_message(filters.private & filters.command("index") & filters.user(OWNER_ID))
@@ -495,6 +505,7 @@ async def process_message(client, message):
 
     if sent_message:
         add_message_map(message.id, sent_message.id)
+        logger.info(f"Created message map: DB ID {message.id} -> UPDATE ID {sent_message.id}")
 
 
 @bot.on_message(filters.command('restart') & filters.private & filters.user(OWNER_ID))

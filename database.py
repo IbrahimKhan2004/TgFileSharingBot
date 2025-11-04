@@ -10,6 +10,31 @@ database = dbclient[MONGO_DB_NAME]
 user_data = database['users']
 banned_users = database['banned_users']
 daily_stats = database['daily_stats']
+message_map = database['message_map']
+
+
+def add_message_map(db_channel_message_id: int, update_channel_message_id: int):
+    """Adds a mapping between a DB channel message and an update channel message."""
+    message_map.insert_one({
+        '_id': db_channel_message_id,
+        'update_channel_message_id': update_channel_message_id
+    })
+    return
+
+
+def get_mapped_message_id(db_channel_message_id: int):
+    """Gets the mapped update channel message ID from the DB channel message ID."""
+    mapping = message_map.find_one({'_id': db_channel_message_id})
+    if mapping:
+        return mapping.get('update_channel_message_id')
+    return None
+
+
+def delete_message_map(db_channel_message_id: int):
+    """Deletes a message mapping."""
+    message_map.delete_one({'_id': db_channel_message_id})
+    return
+
 
 async def present_user(user_id : int):
     found = user_data.find_one({'_id': user_id})

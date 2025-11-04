@@ -144,16 +144,19 @@ async def daily_reset_stats():
     """Resets daily stats (file_count, status, time, inittime) for all users if a day has passed."""
     
     TZ_IST = ZoneInfo("Asia/Kolkata")
-    # Get last reset time
     stats_doc = daily_stats.find_one({'_id': 'daily_reset'})
-    last_reset_timestamp = stats_doc.get('last_reset', 0) if stats_doc else 0
-    
-    # Convert timestamp to datetime object (assuming UTC for consistency)
-    last_reset_date = datetime.fromtimestamp(last_reset_timestamp, tz=TZ_IST).date() 
+    last_reset_timestamp = 0
+    if stats_doc and isinstance(stats_doc.get('last_reset', 0), (int, float)):
+        last_reset_timestamp = stats_doc.get('last_reset', 0)
+
+    try:
+        last_reset_date = datetime.fromtimestamp(last_reset_timestamp, tz=TZ_IST).date()
+    except Exception:
+        last_reset_date = datetime.now(TZ_IST).date() - timedelta(days=1)
+
     current_date = datetime.now(TZ_IST).date()
 
-    if current_date > last_reset_date:
-        # Perform the reset
+    if current_date != last_reset_date:
         user_data.update_many(
             {},
             {
@@ -166,12 +169,9 @@ async def daily_reset_stats():
                 }
             }
         )
-        
-        # Update last reset time
-        new_reset_timestamp = tm()
         daily_stats.update_one(
             {'_id': 'daily_reset'},
-            {'$set': {'last_reset': new_reset_timestamp}},
+            {'$set': {'last_reset': tm()}},
             upsert=True
         )
         return True

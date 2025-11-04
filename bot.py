@@ -18,7 +18,7 @@ from database import (
     ban_user, is_user_banned, unban_user,
     get_bypass_attempts, increment_bypass_attempts,
     update_user_data, get_user_data, increment_file_count, load_all_user_data,
-    daily_reset_stats
+    daily_reset_stats, add_message_map, get_mapped_message_id, delete_message_map
 )
 import urllib.parse # ADDED: Required for urllib.parse.quote_plus
 from datetime import datetime, timedelta, timezone
@@ -185,6 +185,18 @@ async def handle_new_message(client, message):
     # Add the message to the queue for sequential processing
     await message_queue.put(message)
     
+@bot.on_deleted_messages(filters.chat(DB_CHANNEL_ID))
+async def deleted_messages_handler(client, messages):
+    for message in messages:
+        mapped_message_id = get_mapped_message_id(message.id)
+        if mapped_message_id:
+            try:
+                await bot.delete_messages(UPDATE_CHANNEL_ID, mapped_message_id)
+                delete_message_map(message.id)
+            except Exception as e:
+                logger.error(f"Error deleting message {mapped_message_id} from UPDATE_CHANNEL_ID: {e}")
+
+
 @bot.on_message(filters.private & filters.command("index") & filters.user(OWNER_ID))
 async def handle_file(client, message):
     try:
@@ -399,6 +411,7 @@ async def process_message(client, message):
     media = message.document or message.video or message.audio
     poster_url = None
     thumbnail = None
+    sent_message = None
 
     if media:
         caption = message.caption if message.caption else media.file_name
@@ -428,7 +441,7 @@ async def process_message(client, message):
 
         try:           
             if poster_url:
-                await safe_api_call(bot.send_photo(
+                sent_message = await safe_api_call(bot.send_photo(
                     UPDATE_CHANNEL_ID,
                     photo=poster_url,
                     caption=v_info,
@@ -436,7 +449,7 @@ async def process_message(client, message):
                     reply_markup=keyboard
                     ))
             elif thumbnail:
-                await safe_api_call(bot.send_photo(
+                sent_message = await safe_api_call(bot.send_photo(
                     UPDATE_CHANNEL_ID,
                     photo=thumbnail,
                     caption=v_info,
@@ -444,7 +457,7 @@ async def process_message(client, message):
                     reply_markup=keyboard
                 ))
             elif not message.audio:
-                await safe_api_call(bot.send_message(
+                sent_message = await safe_api_call(bot.send_message(
                     UPDATE_CHANNEL_ID,
                     text=v_info,
                     parse_mode=enums.ParseMode.HTML,
@@ -452,7 +465,7 @@ async def process_message(client, message):
                     ))
                 
             if message.audio:
-                await safe_api_call(bot.send_photo(
+                sent_message = await safe_api_call(bot.send_photo(
                     UPDATE_CHANNEL_ID,
                     photo=audio_thumb,
                     caption=a_info,
@@ -463,7 +476,7 @@ async def process_message(client, message):
 
         except (WebpageMediaEmpty, WebpageCurlFailed):
             logger.info(f"{poster_url}")
-            await safe_api_call(bot.send_message(
+            sent_message = await safe_api_call(bot.send_message(
                 UPDATE_CHANNEL_ID,
                 text=v_info,
                 parse_mode=enums.ParseMode.HTML,
@@ -478,7 +491,10 @@ async def process_message(client, message):
             await safe_api_call(bot.send_message(OWNER_ID, text=f"Error in Proccessing MSG:{file_name} {e}"))
     
     elif message.sticker:
-        await safe_api_call(message.copy(UPDATE_CHANNEL_ID))
+        sent_message = await safe_api_call(message.copy(UPDATE_CHANNEL_ID))
+
+    if sent_message:
+        add_message_map(message.id, sent_message.id)
 
 
 @bot.on_message(filters.command('restart') & filters.private & filters.user(OWNER_ID))

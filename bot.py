@@ -411,7 +411,7 @@ async def process_message(client, message):
         file_size = humanbytes(media.file_size)
         if message.video:
             duration = TimeFormatter(media.duration * 1000)
-            if media.thumbs:
+            if media.thumbs and USE_TG_THUMBNAIL:
                 thumbnail = await safe_api_call(bot.download_media(media.thumbs[0].file_id))
             else:
                 thumbnail = None
@@ -421,11 +421,14 @@ async def process_message(client, message):
             movie_name, release_year = await extract_movie_info(file_name)
             poster_url, imdb_id = await get_by_name(movie_name, release_year)
 
+            if not USE_TMDB_IMAGE:
+                poster_url = None
+
             if imdb_id:
                 imdb_tag = f" #{imdb_id}"
                 # Edit original message caption in DB_CHANNEL_ID
                 try:
-                    original_caption = message.caption.html if message.caption else ""
+                    original_caption = message.caption if message.caption else ""
                     if imdb_id not in original_caption:
                         new_original_caption = f"{original_caption}\n\n{imdb_tag}"
                         await safe_api_call(bot.edit_message_caption(

@@ -71,3 +71,7 @@ URLSHORTX_API_TOKEN = os.getenv('URLSHORTX_API_TOKEN')
 SHORTERNER_URL = os.getenv('SHORTERNER_URL')
 TOKEN_TIMEOUT = int(os.getenv('TOKEN_TIMEOUT'))
 MINIMUM_DURATION = int(os.getenv('MINIMUM_DURATION', '0')) # Added: Minimum duration for token verification
+
+# Thumbnail Configuration
+USE_TMDB_IMAGE = os.getenv('USE_TMDB_IMAGE', 'True').lower() == 'true'
+USE_TG_THUMBNAIL = os.getenv('USE_TG_THUMBNAIL', 'True').lower() == 'true'

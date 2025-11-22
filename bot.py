@@ -423,20 +423,14 @@ async def process_message(client, message):
             if existing_imdb_match:
                 imdb_id = existing_imdb_match.group(0)[1:] # Extract ID without #
                 # Remove the tag from file_name so it doesn't get duplicated in v_info
-                file_name = re.sub(r'#tt\d+', '', file_name).strip()
-                poster_url = None # Since we skip TMDB search, we might miss the poster if we don't fetch it.
-                                  # However, avoiding double tagging is priority.
-                                  # If user wants poster, we would need to fetch anyway.
-                                  # Let's fetch to get the poster if needed, but use the existing ID.
+                # Also remove "IMDB ID =" and similar artifacts if they exist
+                file_name = re.sub(r'(IMDB ID\s*=\s*)?#tt\d+', '', file_name, flags=re.IGNORECASE).strip()
+                # Clean up any residual empty blockquotes if present (heuristic)
+                file_name = re.sub(r'<blockquote>\s*</blockquote>', '', file_name).strip()
 
-                # To keep poster functionality, we should still call get_by_name but rely on the existing ID logic
-                # But get_by_name relies on name search.
-                # If we have the ID, we could fetch by ID, but current tmdb.py only supports name search.
-                # For now, let's stick to the plan: avoid double tagging.
-                # If the user wants the poster, they are likely uploading a fresh file.
-                # If reprocessing, maintaining the ID is key.
+                poster_url = None
 
-                # Let's try to get poster if configured, otherwise skip
+                # Let's try to get poster if configured
                 if USE_TMDB_IMAGE:
                      # We still need to parse info to search
                      movie_name_extracted, release_year_extracted = await extract_movie_info(file_name)

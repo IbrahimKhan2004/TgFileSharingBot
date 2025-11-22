@@ -418,8 +418,32 @@ async def process_message(client, message):
         else:
             duration = ""
         if not message.audio: 
-            movie_name, release_year = await extract_movie_info(file_name)
-            poster_url, imdb_id = await get_by_name(movie_name, release_year)
+            # Check if IMDB ID is already in the file name/caption
+            existing_imdb_match = re.search(r'#tt\d+', file_name)
+            if existing_imdb_match:
+                imdb_id = existing_imdb_match.group(0)[1:] # Extract ID without #
+                # Remove the tag from file_name so it doesn't get duplicated in v_info
+                file_name = re.sub(r'#tt\d+', '', file_name).strip()
+                poster_url = None # Since we skip TMDB search, we might miss the poster if we don't fetch it.
+                                  # However, avoiding double tagging is priority.
+                                  # If user wants poster, we would need to fetch anyway.
+                                  # Let's fetch to get the poster if needed, but use the existing ID.
+
+                # To keep poster functionality, we should still call get_by_name but rely on the existing ID logic
+                # But get_by_name relies on name search.
+                # If we have the ID, we could fetch by ID, but current tmdb.py only supports name search.
+                # For now, let's stick to the plan: avoid double tagging.
+                # If the user wants the poster, they are likely uploading a fresh file.
+                # If reprocessing, maintaining the ID is key.
+
+                # Let's try to get poster if configured, otherwise skip
+                if USE_TMDB_IMAGE:
+                     # We still need to parse info to search
+                     movie_name_extracted, release_year_extracted = await extract_movie_info(file_name)
+                     poster_url, _ = await get_by_name(movie_name_extracted, release_year_extracted)
+            else:
+                movie_name, release_year = await extract_movie_info(file_name)
+                poster_url, imdb_id = await get_by_name(movie_name, release_year)
 
             if not USE_TMDB_IMAGE:
                 poster_url = None

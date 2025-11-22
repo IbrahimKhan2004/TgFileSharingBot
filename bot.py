@@ -411,62 +411,21 @@ async def process_message(client, message):
         file_size = humanbytes(media.file_size)
         if message.video:
             duration = TimeFormatter(media.duration * 1000)
-            if media.thumbs and USE_TG_THUMBNAIL:
+            if media.thumbs:
                 thumbnail = await safe_api_call(bot.download_media(media.thumbs[0].file_id))
             else:
                 thumbnail = None
         else:
             duration = ""
         if not message.audio: 
-            # Check if IMDB ID is already in the file name/caption
-            existing_imdb_match = re.search(r'#tt\d+', file_name)
-            if existing_imdb_match:
-                imdb_id = existing_imdb_match.group(0)[1:] # Extract ID without #
-                # Remove the tag from file_name so it doesn't get duplicated in v_info
-                # Also remove "IMDB ID =" and similar artifacts if they exist
-                file_name = re.sub(r'(IMDB ID\s*=\s*)?#tt\d+', '', file_name, flags=re.IGNORECASE).strip()
-                # Clean up any residual empty blockquotes if present (heuristic)
-                file_name = re.sub(r'<blockquote>\s*</blockquote>', '', file_name).strip()
-
-                poster_url = None
-
-                # Let's try to get poster if configured
-                if USE_TMDB_IMAGE:
-                     # We still need to parse info to search
-                     movie_name_extracted, release_year_extracted = await extract_movie_info(file_name)
-                     poster_url, _ = await get_by_name(movie_name_extracted, release_year_extracted)
-            else:
-                movie_name, release_year = await extract_movie_info(file_name)
-                poster_url, imdb_id = await get_by_name(movie_name, release_year)
-
-            if not USE_TMDB_IMAGE:
-                poster_url = None
-
-            if imdb_id:
-                imdb_tag = f"<blockquote><b>IMDB ID = #{imdb_id}</b></blockquote>"
-                # Edit original message caption in DB_CHANNEL_ID
-                try:
-                    original_caption = message.caption if message.caption else ""
-                    if imdb_id not in original_caption:
-                        new_original_caption = f"{original_caption}\n\n{imdb_tag}"
-                        await safe_api_call(bot.edit_message_caption(
-                            chat_id=DB_CHANNEL_ID,
-                            message_id=message.id,
-                            caption=new_original_caption,
-                            parse_mode=enums.ParseMode.HTML
-                        ))
-                except Exception as e:
-                    logger.error(f"Error updating original message caption: {e}")
-            else:
-                imdb_tag = ""
-
+            movie_name, release_year = await extract_movie_info(file_name)
+            poster_url = await get_by_name(movie_name, release_year)
         if message.audio:
             audio_path = await safe_api_call(bot.download_media(message.audio.file_id))
             audio_thumb = await get_audio_thumbnail(audio_path)
-            imdb_tag = ""
 
         file_id = message.id
-        v_info = f"<blockquote expandable><b>{file_name}</b></blockquote>\n<blockquote><b>{file_size}</b></blockquote>\n<blockquote><b>{duration}</b></blockquote>\n{imdb_tag}"
+        v_info = f"<blockquote expandable><b>{file_name}</b></blockquote>\n<blockquote><b>{file_size}</b></blockquote>\n<blockquote><b>{duration}</b></blockquote>"
         if message.audio:
             a_info = f"<blockquote ><b>{media.title}</b></blockquote>\n<blockquote><b>{media.performer}</b></blockquote>"
 

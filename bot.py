@@ -425,7 +425,7 @@ async def process_message(client, message):
                 poster_url = None
 
             if imdb_id:
-                imdb_tag = f" #{imdb_id}"
+                imdb_tag = f"<blockquote><b>IMDB ID = #{imdb_id}</b></blockquote>"
                 # Edit original message caption in DB_CHANNEL_ID
                 try:
                     original_caption = message.caption if message.caption else ""

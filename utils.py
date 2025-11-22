@@ -1,6 +1,7 @@
 import io
 import re
 import asyncio
+import PTN
 from config import *
 from mutagen import File as MutagenFile
 from mutagen.mp3 import MP3
@@ -68,13 +69,13 @@ def humanbytes(size):
 
 async def extract_movie_info(caption):
     try:
-        regex = re.compile(r'(.+?)(\d{4})')
-        match = regex.search(caption)
+        # Parse the caption using PTN
+        parsed_info = PTN.parse(caption)
 
-        if match:
-            # Replace '.' and remove '(' and ')' from movie_name
-            movie_name = match.group(1).replace('.', ' ').replace('(', '').replace(')', '').strip()
-            release_year = match.group(2)
+        movie_name = parsed_info.get('title')
+        release_year = parsed_info.get('year') # This might be None if not found
+
+        if movie_name:
             return movie_name, release_year
     except Exception as e:
         print(e)

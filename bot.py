@@ -419,13 +419,33 @@ async def process_message(client, message):
             duration = ""
         if not message.audio: 
             movie_name, release_year = await extract_movie_info(file_name)
-            poster_url = await get_by_name(movie_name, release_year)
+            poster_url, imdb_id = await get_by_name(movie_name, release_year)
+
+            if imdb_id:
+                imdb_tag = f" #{imdb_id}"
+                # Edit original message caption in DB_CHANNEL_ID
+                try:
+                    original_caption = message.caption.html if message.caption else ""
+                    if imdb_id not in original_caption:
+                        new_original_caption = f"{original_caption}\n\n{imdb_tag}"
+                        await safe_api_call(bot.edit_message_caption(
+                            chat_id=DB_CHANNEL_ID,
+                            message_id=message.id,
+                            caption=new_original_caption,
+                            parse_mode=enums.ParseMode.HTML
+                        ))
+                except Exception as e:
+                    logger.error(f"Error updating original message caption: {e}")
+            else:
+                imdb_tag = ""
+
         if message.audio:
             audio_path = await safe_api_call(bot.download_media(message.audio.file_id))
             audio_thumb = await get_audio_thumbnail(audio_path)
+            imdb_tag = ""
 
         file_id = message.id
-        v_info = f"<blockquote expandable><b>{file_name}</b></blockquote>\n<blockquote><b>{file_size}</b></blockquote>\n<blockquote><b>{duration}</b></blockquote>"
+        v_info = f"<blockquote expandable><b>{file_name}</b></blockquote>\n<blockquote><b>{file_size}</b></blockquote>\n<blockquote><b>{duration}</b></blockquote>\n{imdb_tag}"
         if message.audio:
             a_info = f"<blockquote ><b>{media.title}</b></blockquote>\n<blockquote><b>{media.performer}</b></blockquote>"
 

@@ -8,3 +8,4 @@ requests
 aiohttp
 pymongo
 mutagen
+parse-torrent-name

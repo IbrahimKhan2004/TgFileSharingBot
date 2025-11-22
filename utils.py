@@ -1,7 +1,6 @@
 import io
 import re
 import asyncio
-import PTN
 from config import *
 from mutagen import File as MutagenFile
 from mutagen.mp3 import MP3
@@ -69,28 +68,14 @@ def humanbytes(size):
 
 async def extract_movie_info(caption):
     try:
-        # Pre-process caption to remove garbage that might confuse PTN
-        # Remove lines starting with "Upload By", "Join", etc.
-        lines = caption.split('\n')
-        cleaned_lines = []
-        for line in lines:
-            if re.search(r'(Upload By|Join & Support|@\w+)', line, re.IGNORECASE):
-                continue
-            cleaned_lines.append(line)
-        cleaned_caption = "\n".join(cleaned_lines)
+        regex = re.compile(r'(.+?)(\d{4})')
+        match = regex.search(caption)
 
-        # Remove "Title:", "Movie:", emojis
-        cleaned_caption = re.sub(r'(Title|Movie|Series Info|Quality|Audio)\s*[:\-|]?\s*', '', cleaned_caption, flags=re.IGNORECASE)
-        cleaned_caption = re.sub(r'[^\w\s\.\-\(\)]', ' ', cleaned_caption) # Remove emojis/special chars
-
-        # Parse the caption using PTN
-        parsed_info = PTN.parse(cleaned_caption)
-
-        movie_name = parsed_info.get('title')
-        release_year = parsed_info.get('year') # This might be None if not found
-
-        if movie_name:
-            return movie_name.strip(), release_year
+        if match:
+            # Replace '.' and remove '(' and ')' from movie_name
+            movie_name = match.group(1).replace('.', ' ').replace('(', '').replace(')', '').strip()
+            release_year = match.group(2)
+            return movie_name, release_year
     except Exception as e:
         print(e)
     return None, None

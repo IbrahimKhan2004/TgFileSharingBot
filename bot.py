@@ -85,6 +85,11 @@ async def start_command(client, message):
             if command_arg.startswith("token_"):
                 input_token = command_arg[6:]
                 
+                if user_data.get(user_id, {}).get('status') == 'verified':
+                    reply = await safe_api_call(message.reply_text("You are already verified! ✅"))
+                    await auto_delete_message(message, reply)
+                    return
+
                 # Bypass detection logic
                 if user_id in user_data and 'inittime' in user_data[user_id]:
                     inittime = user_data[user_id]['inittime']

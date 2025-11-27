@@ -200,6 +200,22 @@ async def get_dynamic_config():
         return {k: v for k, v in config_doc.items() if k != '_id'}
     return {}
 
+async def get_expired_users(expiry_threshold):
+    """
+    Returns a list of user IDs whose status is 'verified' and
+    token creation time is less than the expiry_threshold.
+    """
+    query = {
+        'status': 'verified',
+        'time': {'$lt': expiry_threshold}
+    }
+    # Return only _id field
+    cursor = user_data.find(query, {'_id': 1})
+    expired_user_ids = []
+    for doc in cursor:
+        expired_user_ids.append(doc['_id'])
+    return expired_user_ids
+
 async def update_dynamic_config(key, value):
     """Updates a single configuration key."""
     config_collection.update_one(

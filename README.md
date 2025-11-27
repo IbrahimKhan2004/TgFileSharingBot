@@ -199,6 +199,7 @@ restart - Restart the bot (Owner Only)
 *   `/start <file_id>`: (Usually triggered by the "Send in DM" button from `UPDATE_CHANNEL_ID`) Initiates the file download process, including token verification.
 *   `/start token`: (Usually triggered by a button when access is denied) Sends the user a message (copied from `LOG_CHANNEL_ID` via `TUT_ID`) explaining how to get a token, along with a "🎟️ Get Token" (shortened link) and "How to get verified ✅" button.
 *   `/start token_<unique_token_string>`: (Usually triggered by visiting the shortened token link) Attempts to verify the `unique_token_string`.
+*   `/me` or `/status`: Shows your current verification status, token expiry time, and daily file limit usage.
 
 ## Disclaimer
 

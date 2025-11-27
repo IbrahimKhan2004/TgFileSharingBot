@@ -18,7 +18,8 @@ from database import (
     ban_user, is_user_banned, unban_user,
     get_bypass_attempts, increment_bypass_attempts,
     update_user_data, get_user_data, increment_file_count, load_all_user_data,
-    daily_reset_stats, save_shortener_link, get_dynamic_config, update_dynamic_config
+    daily_reset_stats, save_shortener_link, get_dynamic_config, update_dynamic_config,
+    get_expired_users
 )
 import urllib.parse # ADDED: Required for urllib.parse.quote_plus
 from datetime import datetime, timedelta, timezone
@@ -410,6 +411,53 @@ async def unban_command(client, message):
         await message.reply_text("Invalid user ID format.")
     except Exception as e:
         await message.reply_text(f"An error occurred: {e}")
+
+@bot.on_message(filters.command(["me", "status"]) & filters.private)
+async def my_status(client, message):
+    user_id = message.from_user.id
+    udata = user_data.get(user_id)
+
+    if not udata:
+        udata = await get_user_data(user_id)
+        if udata:
+            user_data[user_id] = udata
+
+    if not udata:
+        await message.reply_text("User data not found. Please /start the bot first.")
+        return
+
+    status = udata.get('status', 'unverified')
+    file_count = udata.get('file_count', 0)
+    token_time = udata.get('time', 0)
+
+    daily_limit = bot_config.get('DAILY_LIMIT', DAILY_LIMIT)
+    token_timeout = bot_config.get('TOKEN_TIMEOUT', TOKEN_TIMEOUT)
+
+    user_link = await get_user_link(message.from_user)
+
+    status_text = "Verified ✅" if status == "verified" else "Unverified ❌"
+
+    expiry_text = "N/A"
+    if status == "verified":
+        expiry_time = token_time + token_timeout
+        remaining_seconds = expiry_time - tm()
+
+        if remaining_seconds > 0:
+            expiry_text = get_readable_time(remaining_seconds)
+        else:
+            expiry_text = "Expired"
+            status_text = "Expired ⚠️"
+
+    response = (
+        f"👤 **User Profile**\n\n"
+        f"🆔 **ID:** `{user_id}`\n"
+        f"👤 **Name:** {user_link}\n\n"
+        f"🔐 **Status:** {status_text}\n"
+        f"⏳ **Expires in:** {expiry_text}\n"
+        f"📂 **Daily Limit:** {file_count}/{daily_limit}"
+    )
+
+    await message.reply_text(response)
 
 @bot.on_message(filters.command("settings") & filters.user(OWNER_ID))
 async def settings_command(client, message):
@@ -841,10 +889,48 @@ async def daily_reset_scheduler():
         logger.info(f"Daily reset scheduled to run in {sleep_duration:.0f} seconds.")
         await asyncio.sleep(sleep_duration) 
 
+async def check_expired_tokens():
+    global user_data
+    while True:
+        try:
+            token_timeout = bot_config.get('TOKEN_TIMEOUT', TOKEN_TIMEOUT)
+            expiry_threshold = tm() - token_timeout
+
+            expired_users = await get_expired_users(expiry_threshold)
+
+            if expired_users:
+                logger.info(f"Found {len(expired_users)} expired tokens. Processing...")
+
+                for user_id in expired_users:
+                    # Update status in DB
+                    await update_user_data(user_id, {'status': 'unverified'})
+
+                    # Update local cache
+                    if user_id in user_data:
+                        user_data[user_id]['status'] = 'unverified'
+
+                    # Notify user
+                    try:
+                        await bot.send_message(
+                            user_id,
+                            "⚠️ **Token Expired**\n\nYour token has expired. Please /start to get a new token and continue downloading files."
+                        )
+                    except (UserIsBlocked, InputUserDeactivated):
+                        pass # User blocked bot or deleted account
+                    except Exception as e:
+                        logger.warning(f"Failed to notify user {user_id} about expiry: {e}")
+
+        except Exception as e:
+            logger.error(f"Error in token expiry check: {e}")
+
+        # Check every 5 minutes
+        await asyncio.sleep(300)
+
 async def main():
     await load_initial_data()
     await asyncio.create_task(process_queue())
     await asyncio.create_task(daily_reset_scheduler())
+    await asyncio.create_task(check_expired_tokens())
     await asyncio.Event().wait()
 
 if __name__ == "__main__":

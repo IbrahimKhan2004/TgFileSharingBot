@@ -416,7 +416,7 @@ async def settings_command(client, message):
     buttons = [
         [InlineKeyboardButton(f"Min Duration: {bot_config.get('MINIMUM_DURATION')}s", callback_data="set_duration")],
         [InlineKeyboardButton(f"Shortener URL: {bot_config.get('SHORTERNER_URL')}", callback_data="set_shortener")],
-        [InlineKeyboardButton("API Token (Hidden)", callback_data="set_api_token")],
+        [InlineKeyboardButton(f"API Token: {bot_config.get('URLSHORTX_API_TOKEN')}", callback_data="set_api_token")],
         [InlineKeyboardButton(f"Tutorial ID: {bot_config.get('TUT_ID')}", callback_data="set_tut_id")],
         [InlineKeyboardButton(f"Daily Limit: {bot_config.get('DAILY_LIMIT')}", callback_data="set_daily_limit")],
         [InlineKeyboardButton(f"Token Timeout: {bot_config.get('TOKEN_TIMEOUT')}s", callback_data="set_token_timeout")],
@@ -448,6 +448,16 @@ async def settings_callback(client, callback_query):
 
     try:
         user_response = await client.listen(chat_id=callback_query.from_user.id, user_id=callback_query.from_user.id, timeout=60)
+
+        # Check if the user sent a command (e.g. /settings) instead of a value
+        if user_response.text and user_response.text.startswith("/"):
+            await prompt_msg.edit("❌ Input cancelled. You sent a command.")
+            # Process the command normally by re-triggering (or just let the user send it again)
+            # Since listen consumes the message, the bot won't process it as a command automatically
+            # unless we manually re-dispatch or just tell user to retry.
+            # Here we just cancel the setting update.
+            return
+
         new_value = user_response.text.strip()
 
         # Validation and Update

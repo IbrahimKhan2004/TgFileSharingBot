@@ -468,7 +468,8 @@ async def settings_command(client, message):
         [InlineKeyboardButton(f"Tutorial ID: {bot_config.get('TUT_ID')}", callback_data="set_tut_id")],
         [InlineKeyboardButton(f"Daily Limit: {bot_config.get('DAILY_LIMIT')}", callback_data="set_daily_limit")],
         [InlineKeyboardButton(f"Token Timeout: {bot_config.get('TOKEN_TIMEOUT')}s", callback_data="set_token_timeout")],
-        [InlineKeyboardButton("🔄 Restart Bot", callback_data="restart_bot")]
+        [InlineKeyboardButton("🔄 Restart Bot", callback_data="restart_bot")],
+        [InlineKeyboardButton("❌ Close", callback_data="close_settings")]
     ]
     await message.reply_text("⚙️ **Bot Settings**\nClick to edit values:", reply_markup=InlineKeyboardMarkup(buttons))
 
@@ -559,6 +560,10 @@ async def restart_callback(client, callback_query):
     await callback_query.answer("Restarting...", show_alert=True)
     os.system("python3 update.py")
     os.execl(sys.executable, sys.executable, "bot.py")
+
+@bot.on_callback_query(filters.regex("^close_settings"))
+async def close_settings_callback(client, callback_query):
+    await callback_query.message.delete()
 
 
 @bot.on_message(filters.private & filters.command("verify") & filters.user(OWNER_ID))

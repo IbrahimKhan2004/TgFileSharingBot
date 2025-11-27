@@ -449,12 +449,12 @@ async def my_status(client, message):
             status_text = "Expired ⚠️"
 
     response = (
-        f"👤 **User Profile**\n\n"
-        f"🆔 **ID:** `{user_id}`\n"
-        f"👤 **Name:** {user_link}\n\n"
-        f"🔐 **Status:** {status_text}\n"
-        f"⏳ **Expires in:** {expiry_text}\n"
-        f"📂 **Daily Limit:** {file_count}/{daily_limit}"
+        f"👤 <b>User Profile</b>\n\n"
+        f"🆔 <b>ID:</b> <code>{user_id}</code>\n"
+        f"👤 <b>Name:</b> {user_link}\n\n"
+        f"🔐 <b>Status:</b> {status_text}\n"
+        f"⏳ <b>Expires in:</b> {expiry_text}\n"
+        f"📂 <b>Daily Limit:</b> {file_count}/{daily_limit}"
     )
 
     await message.reply_text(response)
@@ -477,17 +477,17 @@ async def settings_callback(client, callback_query):
     action = callback_query.data
 
     if action == "set_duration":
-        prompt = "Send new **Minimum Duration** (in seconds):"
+        prompt = "Send new <b>Minimum Duration</b> (in seconds):"
     elif action == "set_shortener":
-        prompt = "Send new **Shortener URL** (domain):"
+        prompt = "Send new <b>Shortener URL</b> (domain):"
     elif action == "set_api_token":
-        prompt = "Send new **API Token**:"
+        prompt = "Send new <b>API Token</b>:"
     elif action == "set_tut_id":
-        prompt = "Send new **Tutorial Message ID**:"
+        prompt = "Send new <b>Tutorial Message ID</b>:"
     elif action == "set_daily_limit":
-        prompt = "Send new **Daily Limit** (number of files):"
+        prompt = "Send new <b>Daily Limit</b> (number of files):"
     elif action == "set_token_timeout":
-        prompt = "Send new **Token Timeout** (in seconds):"
+        prompt = "Send new <b>Token Timeout</b> (in seconds):"
     else:
         return
 
@@ -546,7 +546,7 @@ async def settings_callback(client, callback_query):
         if key:
             await update_dynamic_config(key, new_value)
             bot_config[key] = new_value # Update runtime config
-            await user_response.reply_text(f"✅ **{key}** updated to `{new_value}`.\nRestart required for some changes to fully take effect in other modules.")
+            await user_response.reply_text(f"✅ <b>{key}</b> updated to <code>{new_value}</code>.\nRestart required for some changes to fully take effect in other modules.")
 
             # Show settings again
             await settings_command(client, user_response)
@@ -913,7 +913,7 @@ async def check_expired_tokens():
                     try:
                         await bot.send_message(
                             user_id,
-                            "⚠️ **Token Expired**\n\nYour token has expired. Please /start to get a new token and continue downloading files."
+                            "⚠️ <b>Token Expired</b>\n\nYour token has expired. Please /start to get a new token and continue downloading files."
                         )
                     except (UserIsBlocked, InputUserDeactivated):
                         pass # User blocked bot or deleted account

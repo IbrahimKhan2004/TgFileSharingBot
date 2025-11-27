@@ -191,6 +191,8 @@ log - Get log file (Owner Only)
 delete - Delete messages from update channel (Owner Only)
 index - Index files from DB channel (Owner Only)
 restart - Restart the bot (Owner Only)
+me - Show your profile (User)
+status - Show your profile (User)
 ```
 
 ### User Commands (Private Chat with Bot)

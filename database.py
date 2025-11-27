@@ -10,6 +10,20 @@ database = dbclient[MONGO_DB_NAME]
 user_data = database['users']
 banned_users = database['banned_users']
 daily_stats = database['daily_stats']
+shortener_requests = database['shortener_requests']
+
+async def save_shortener_link(request_id: str, shortened_url: str):
+    """Saves the shortened URL mapping."""
+    shortener_requests.insert_one({
+        '_id': request_id,
+        'shortened_url': shortened_url,
+        'created_at': tm()
+    })
+
+def get_shortener_link_sync(request_id: str):
+    """Gets the shortened URL (Synchronous for Flask)."""
+    req = shortener_requests.find_one({'_id': request_id})
+    return req.get('shortened_url') if req else None
 
 async def present_user(user_id : int):
     found = user_data.find_one({'_id': user_id})

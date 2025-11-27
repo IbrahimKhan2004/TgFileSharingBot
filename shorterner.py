@@ -1,11 +1,14 @@
 import aiohttp
 from config import *
 
-async def shorten_url(url):
+async def shorten_url(url, base_site=None, api_token=None):
     try:
-        api_url = f"https://{SHORTERNER_URL}/api"
+        site = base_site if base_site else SHORTERNER_URL
+        token = api_token if api_token else URLSHORTX_API_TOKEN
+
+        api_url = f"https://{site}/api"
         params = {
-            "api": URLSHORTX_API_TOKEN,
+            "api": token,
             "url": url,
             "format": "text"
         }

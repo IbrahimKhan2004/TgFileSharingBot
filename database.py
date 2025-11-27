@@ -11,6 +11,7 @@ user_data = database['users']
 banned_users = database['banned_users']
 daily_stats = database['daily_stats']
 shortener_requests = database['shortener_requests']
+config_collection = database['config']
 
 async def save_shortener_link(request_id: str, shortened_url: str):
     """Saves the shortened URL mapping."""
@@ -190,3 +191,19 @@ async def daily_reset_stats():
         )
         return True
     return False
+
+async def get_dynamic_config():
+    """Loads dynamic configuration from database."""
+    config_doc = config_collection.find_one({'_id': 'bot_settings'})
+    if config_doc:
+        # Exclude _id from the returned dictionary
+        return {k: v for k, v in config_doc.items() if k != '_id'}
+    return {}
+
+async def update_dynamic_config(key, value):
+    """Updates a single configuration key."""
+    config_collection.update_one(
+        {'_id': 'bot_settings'},
+        {'$set': {key: value}},
+        upsert=True
+    )

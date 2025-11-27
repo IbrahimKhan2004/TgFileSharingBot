@@ -18,7 +18,7 @@ from database import (
     ban_user, is_user_banned, unban_user,
     get_bypass_attempts, increment_bypass_attempts,
     update_user_data, get_user_data, increment_file_count, load_all_user_data,
-    daily_reset_stats
+    daily_reset_stats, save_shortener_link
 )
 import urllib.parse # ADDED: Required for urllib.parse.quote_plus
 from datetime import datetime, timedelta, timezone
@@ -566,10 +566,10 @@ async def update_token(user_id):
 
         # 3. Create the link to your Flask app's gate
         # This will be the URL for the "🎟️ Get Token" button in Telegram
-        flask_gate_link = (
-            f"{FLASK_APP_BASE_URL}/gate?"
-            f"redirect_to_shortener={urllib.parse.quote_plus(external_shortened_url)}" # Pass the URL shortener link to Flask
-        )
+        request_id = str(uuid.uuid4())
+        await save_shortener_link(request_id, external_shortened_url)
+
+        flask_gate_link = f"{FLASK_APP_BASE_URL}/gate?id={request_id}"
         
         button1 = InlineKeyboardButton("🎟️ Get Token", url=flask_gate_link) # Link to your Flask app gate
         button2 = InlineKeyboardButton("How to get verified ✅", url=f'https://telegram.me/{bot_username}?start=token')
@@ -590,10 +590,10 @@ async def genrate_token(user_id):
         bot_deep_link = f'https://telegram.dog/{bot_username}?start=token_{token}'
         external_shortened_url = await shorten_url(bot_deep_link)
 
-        flask_gate_link = (
-            f"{FLASK_APP_BASE_URL}/gate?"
-            f"redirect_to_shortener={urllib.parse.quote_plus(external_shortened_url)}"
-        )
+        request_id = str(uuid.uuid4())
+        await save_shortener_link(request_id, external_shortened_url)
+
+        flask_gate_link = f"{FLASK_APP_BASE_URL}/gate?id={request_id}"
         
         button1 = InlineKeyboardButton("🎟️ Get Token", url=flask_gate_link)
         button2 = InlineKeyboardButton("How to get verified ✅", url=f'https://telegram.me/{bot_username}?start=token')

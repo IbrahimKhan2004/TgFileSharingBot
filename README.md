@@ -177,6 +177,22 @@ Create a `config.env` file in the root directory or set these environment variab
 *   `/log`: Sends the `log.txt` file to the owner.
 *   `/restart`: Restarts the bot. Pulls updates from `UPSTREAM_REPO` if configured, then restarts the Python process.
 
+### BotFather Copyable Commands
+
+```
+start - Start the bot
+verify - Manually verify a user (Owner Only)
+settings - Open bot settings (Owner Only)
+unban - Unban a user (Owner Only)
+broadcast - Broadcast a message (Owner Only)
+users - Show total users (Owner Only)
+stats - Show bot statistics (Owner Only)
+log - Get log file (Owner Only)
+delete - Delete messages from update channel (Owner Only)
+index - Index files from DB channel (Owner Only)
+restart - Restart the bot (Owner Only)
+```
+
 ### User Commands (Private Chat with Bot)
 
 *   `/start`: Shows a welcome message.

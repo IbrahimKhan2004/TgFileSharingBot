@@ -122,7 +122,7 @@ async def start_command(client, message):
                         if attempts == 1:
                             # 1st bypass: Warning
                             warning_message = (
-                                f"**First Warning! ⚠️**\n\n"
+                                f"<b>First Warning! ⚠️</b>\n\n"
                                 f"This is your first warning for attempting to bypass the verification process. "
                                 f"Please follow the proper steps. Further attempts will result in a ban."
                             )
@@ -154,15 +154,15 @@ async def start_command(client, message):
 
                         log_message = (
                             f"User🕵️‍♂️{user_link} with 🆔 {user_id} @{bot_username} "
-                            f"attempted token bypass! ❌ **{ban_message}** (Attempt: {attempts})\n"
+                            f"attempted token bypass! ❌ <b>{ban_message}</b> (Attempt: {attempts})\n"
                             f"Time taken: {duration:.2f} seconds (Min required: {min_duration} seconds)\n"
-                            f"Token: `{input_token}`"
+                            f"Token: <code>{input_token}</code>"
                         )
                         await safe_api_call(bot.send_message(LOG_CHANNEL_ID, log_message, parse_mode=enums.ParseMode.HTML))
                         
                         warning_message = (
-                            f"**Bypass Detected! 🚨**\n\n"
-                            f"You have been **{ban_message}** for repeatedly attempting to bypass the verification process. "
+                            f"<b>Bypass Detected! 🚨</b>\n\n"
+                            f"You have been <b>{ban_message}</b> for repeatedly attempting to bypass the verification process. "
                             f"Your token has been invalidated."
                         )
                         reply = await safe_api_call(message.reply_text(warning_message))
@@ -471,7 +471,7 @@ async def settings_command(client, message):
         [InlineKeyboardButton("🔄 Restart Bot", callback_data="restart_bot")],
         [InlineKeyboardButton("❌ Close", callback_data="close_settings")]
     ]
-    await message.reply_text("⚙️ **Bot Settings**\nClick to edit values:", reply_markup=InlineKeyboardMarkup(buttons))
+    await message.reply_text("⚙️ <b>Bot Settings</b>\nClick to edit values:", reply_markup=InlineKeyboardMarkup(buttons))
 
 @bot.on_callback_query(filters.regex("^set_"))
 async def settings_callback(client, callback_query):

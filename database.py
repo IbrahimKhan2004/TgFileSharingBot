@@ -15,10 +15,13 @@ config_collection = database['config']
 
 async def save_shortener_link(request_id: str, shortened_url: str):
     """Saves the shortened URL mapping."""
+    # Ensure TTL index exists (expires after 1 hour)
+    shortener_requests.create_index("created_at", expireAfterSeconds=3600)
+
     shortener_requests.insert_one({
         '_id': request_id,
         'shortened_url': shortened_url,
-        'created_at': tm()
+        'created_at': datetime.utcnow()
     })
 
 def get_shortener_link_sync(request_id: str):

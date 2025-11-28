@@ -184,21 +184,10 @@ async def start_command(client, message):
             media = file_message.video or file_message.audio or file_message.document
             if media:
                 caption = await remove_extension(file_message.caption.html or "")
-
-                # Create the "Get File" button
-                keyboard = InlineKeyboardMarkup(
-                    [[InlineKeyboardButton("Get File", callback_data=f"get_file_{file_id}")]]
-                )
-
-                # Send a message with the button
-                confirmation_message = await message.reply_text(
-                    f"Your file is ready: <b>{caption}</b>\n\nClick the button below to save it to your 'Saved Messages'.",
-                    reply_markup=keyboard,
-                    parse_mode=enums.ParseMode.HTML
-                )
-
-                # We can add auto-deletion for the confirmation message if needed
-                # await auto_delete_message(message, confirmation_message, delay=300)
+                copy_message = await safe_api_call(file_message.copy(chat_id=message.chat.id, caption=f"<b>{caption}</b>", parse_mode=enums.ParseMode.HTML))
+                await increment_file_count(user_id)
+                user_data[user_id]['file_count'] += 1
+                await auto_delete_message(message, copy_message)
             else:
                 await auto_delete_message(message, await message.reply_text("File not found or inaccessible."))
             return
@@ -575,57 +564,6 @@ async def restart_callback(client, callback_query):
 @bot.on_callback_query(filters.regex("^close_settings"))
 async def close_settings_callback(client, callback_query):
     await callback_query.message.delete()
-
-
-@bot.on_callback_query(filters.regex("^get_file_"))
-async def get_file_callback(client, callback_query):
-    try:
-        user_id = callback_query.from_user.id
-
-        # Extract file_id from callback_data (e.g., "get_file_12345")
-        file_id = int(callback_query.data.split("_")[-1])
-
-        # Acknowledge the button press
-        await callback_query.answer("Sending file to your Saved Messages...", show_alert=False)
-
-        # Fetch the file from the database channel
-        file_message = await safe_api_call(bot.get_messages(DB_CHANNEL_ID, file_id))
-
-        media = file_message.video or file_message.audio or file_message.document
-        if media:
-            caption = await remove_extension(file_message.caption.html or "")
-
-            # Send the file to the user's "Saved Messages"
-            # In Telegram, a user's "Saved Messages" chat_id is their own user_id
-            await safe_api_call(file_message.copy(
-                chat_id=user_id,
-                caption=f"<b>{caption}</b>",
-                parse_mode=enums.ParseMode.HTML
-            ))
-
-            # Increment file count
-            await increment_file_count(user_id)
-            if user_id in user_data:
-                user_data[user_id]['file_count'] += 1
-
-            # Edit the original message to confirm and remove the button
-            await callback_query.message.edit_text(
-                "✅ File has been sent to your Saved Messages.",
-                reply_markup=None # This removes the button
-            )
-        else:
-            await callback_query.answer("Error: File not found or is inaccessible.", show_alert=True)
-            await callback_query.message.edit_text("❌ Error: Could not retrieve the file.")
-
-    except Exception as e:
-        logger.error(f"Error in get_file_callback: {e}")
-        try:
-            # Try to inform the user about the error
-            await callback_query.answer(f"An error occurred: {e}", show_alert=True)
-            await callback_query.message.edit_text("❌ An unexpected error occurred.")
-        except:
-            # If editing the message fails, just log it
-            pass
 
 
 @bot.on_message(filters.private & filters.command("verify") & filters.user(OWNER_ID))

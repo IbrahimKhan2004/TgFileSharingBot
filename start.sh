@@ -1,2 +1,2 @@
 #!/bin/bash
-gunicorn app:app --workers 1 --threads 1 --bind 0.0.0.0:$PORT --timeout 86400 & python3 bot.py
+uvicorn app:app --host 0.0.0.0 --port $PORT --workers 1 & python3 bot.py

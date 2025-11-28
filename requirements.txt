@@ -6,5 +6,7 @@ TgCrypto
 python-dotenv
 requests
 aiohttp
-pymongo
+pymongo[snappy]
+motor
 mutagen
+tzdata

@@ -1,4 +1,4 @@
-flask 
+quart
 gunicorn
 uvloop
 pyrofork
@@ -10,3 +10,4 @@ pymongo[snappy]
 motor
 mutagen
 tzdata
+uvicorn

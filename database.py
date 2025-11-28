@@ -6,13 +6,9 @@ from time import time as tm
 from datetime import datetime, timedelta, timezone
 from zoneinfo import ZoneInfo
 
-# Async Client for Bot (Pyrogram) - Using Motor
+# Async Client for Bot (Pyrogram) and Flask App (Asynchronous) - Using Motor
 async_client = AsyncIOMotorClient(MONGO_URI)
 async_db = async_client[MONGO_DB_NAME]
-
-# Sync Client for Flask (Synchronous) - Using PyMongo
-sync_client = MongoClient(MONGO_URI)
-sync_db = sync_client[MONGO_DB_NAME]
 
 # Collections for Async use
 user_data = async_db['users']
@@ -24,7 +20,6 @@ config_collection = async_db['config']
 async def save_shortener_link(request_id: str, shortened_url: str):
     """Saves the shortened URL mapping."""
     # Ensure TTL index exists (expires after 1 hour)
-    # Motor's create_index is awaitable
     await shortener_requests.create_index("created_at", expireAfterSeconds=3600)
 
     await shortener_requests.insert_one({
@@ -33,10 +28,9 @@ async def save_shortener_link(request_id: str, shortened_url: str):
         'created_at': datetime.utcnow()
     })
 
-def get_shortener_link_sync(request_id: str):
-    """Gets the shortened URL (Synchronous for Flask)."""
-    # Use the synchronous client's collection
-    req = sync_db['shortener_requests'].find_one({'_id': request_id})
+async def get_shortener_link_async(request_id: str):
+    """Gets the shortened URL (Asynchronous for Flask)."""
+    req = await shortener_requests.find_one({'_id': request_id})
     return req.get('shortened_url') if req else None
 
 async def present_user(user_id : int):

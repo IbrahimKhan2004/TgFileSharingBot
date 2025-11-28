@@ -1,20 +1,20 @@
-from flask import Flask, redirect, request, render_template_string
+from quart import Quart, request, render_template_string
 import os
 import urllib.parse
-from database import get_shortener_link_sync
+from database import get_shortener_link_async
 
-app = Flask(__name__)
+app = Quart(__name__)
 
 @app.route('/')
-def hello_world():
+async def hello_world():
     return '⚡Your App is Running⚡'
 
 @app.route('/gate')
-def human_gate():
+async def human_gate():
     request_id = request.args.get('id')
 
     if request_id:
-        shortener_redirect_url = get_shortener_link_sync(request_id)
+        shortener_redirect_url = await get_shortener_link_async(request_id)
         if not shortener_redirect_url:
             return "Invalid ID or link expired.", 404
     else:
@@ -54,7 +54,7 @@ def human_gate():
     </body>
     </html>
     """
-    return render_template_string(html_content, url=shortener_redirect_url)
+    return await render_template_string(html_content, url=shortener_redirect_url)
 
 
 if __name__ == "__main__":

@@ -391,12 +391,10 @@ async def get_stats(client, message):
 
     stats_text = (
         "📊 <b>BOT STATISTICS</b> 📊\n\n"
-        f"<b>Total Users:</b> <code>{total_users}</code>\n"
-        "--- \n"
+        f"<b>Total Users:</b> <code>{total_users}</code>\n\n"
         "<b>Today's Stats (Resets at Midnight)</b>\n"
         f"<b>New Verifications Today:</b> <code>{verified_today}</code>\n"
-        f"<b>Files Shared Today:</b> <code>{files_shared_today}</code>\n"
-        "--- \n"
+        f"<b>Files Shared Today:</b> <code>{files_shared_today}</code>\n\n"
         f"<b>Token Timeout:</b> <code>{get_readable_time(token_timeout)}</code>\n"
         f"<b>Daily File Limit:</b> <code>{daily_limit}</code> files"
     )

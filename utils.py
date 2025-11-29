@@ -24,10 +24,11 @@ async def remove_extension(caption):
         logger.error(e)
         return None
     
-async def auto_delete_message(user_message, bot_message):
+async def auto_delete_message(user_message, bot_message, delay=60):
     try:
-        await user_message.delete()
-        await asyncio.sleep(65)
+        if user_message:
+            await user_message.delete()
+        await asyncio.sleep(delay)
         await bot_message.delete()
     except Exception as e:
         logger.error(f"{e}")
@@ -131,7 +132,6 @@ async def safe_api_call(coro):
     """Utility wrapper to add delay before every bot API call."""
     while True:
         try:
-            await asyncio.sleep(3)
             return await coro
         except FloodWait as e:
             logger.error(f"FloodWait: Sleeping for {e.value} seconds")

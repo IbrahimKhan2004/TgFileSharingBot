@@ -34,6 +34,7 @@ message_queue = Queue()
 
 user_data = {}
 bot_config = {}
+bot_start_time = tm()
 
 def clean_force_sub_url(url_str):
     if not url_str:
@@ -385,14 +386,9 @@ Unsuccessful: <code>{unsuccessful}</code></b>"""
         await asyncio.sleep(8)
         await msg.delete()
 
-@bot.on_message(filters.command('users') & filters.private & filters.user(OWNER_ID))
-async def get_users(client, message):
-    msg = await client.send_message(chat_id=message.chat.id, text="Please Wait..")
-    users = await full_userbase()
-    await msg.edit(f"{len(users)} users are using this bot")
-
 @bot.on_message(filters.command('stats') & filters.private & filters.user(OWNER_ID))
 async def get_stats(client, message):
+    start_time = tm()
     msg = await client.send_message(chat_id=message.chat.id, text="Gathering statistics...")
 
     # Get total users from the database
@@ -407,6 +403,13 @@ async def get_stats(client, message):
     token_timeout = bot_config.get('TOKEN_TIMEOUT', TOKEN_TIMEOUT)
     daily_limit = bot_config.get('DAILY_LIMIT', DAILY_LIMIT)
 
+    # Calculate Uptime
+    uptime = get_readable_time(tm() - bot_start_time)
+
+    # Calculate Ping
+    end_time = tm()
+    ping = f"{(end_time - start_time) * 1000:.2f} ms"
+
     stats_text = (
         "📊 <b>BOT STATISTICS</b> 📊\n\n"
         f"<b>Total Users:</b> <code>{total_users}</code>\n\n"
@@ -414,7 +417,9 @@ async def get_stats(client, message):
         f"<b>New Verifications Today:</b> <code>{verified_today}</code>\n"
         f"<b>Files Shared Today:</b> <code>{files_shared_today}</code>\n\n"
         f"<b>Token Timeout:</b> <code>{get_readable_time(token_timeout)}</code>\n"
-        f"<b>Daily File Limit:</b> <code>{daily_limit}</code> files"
+        f"<b>Daily File Limit:</b> <code>{daily_limit}</code> files\n"
+        f"<b>Bot Uptime:</b> <code>{uptime}</code>\n"
+        f"<b>Ping:</b> <code>{ping}</code>"
     )
 
     try:

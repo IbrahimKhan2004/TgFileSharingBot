@@ -69,6 +69,8 @@ The bot includes features for monitoring its usage and ensuring system health.
     *   **Total Users:** The overall number of users who have ever started the bot.
     *   **New Verifications Today:** A counter for how many users have successfully verified on the current day. This number resets to zero at midnight (IST).
     *   **Files Shared Today:** A counter for the total number of files downloaded by all users on the current day. This also resets to zero at midnight (IST).
+    *   **Bot Uptime:** Shows how long the bot has been running since its last restart.
+    *   **Ping:** Displays the latency of the bot's response time.
 
 *   **Daily Reset Mechanism:**
     *   The daily statistics are designed to be **restart-proof**. If the bot is offline at midnight, it will automatically run the reset the moment it comes back online, ensuring you never have incorrect or missed daily stats.
@@ -194,7 +196,6 @@ Create a `config.env` file in the root directory or set these environment variab
 *   `/index`: Prompts for a start and end message ID from `DB_CHANNEL_ID` to batch process/re-process files.
 *   `/cancel`: Cancels an ongoing `/index` operation.
 *   `/broadcast` (as a reply to a message): Broadcasts the replied message to all users in the database.
-*   `/users`: Shows the total number of users in the database.
 *   `/log`: Sends the `log.txt` file to the owner.
 *   `/restart`: Restarts the bot. Pulls updates from `UPSTREAM_REPO` if configured, then restarts the Python process.
 
@@ -206,7 +207,6 @@ verify - Manually verify a user (Owner Only)
 settings - Open bot settings (Owner Only)
 unban - Unban a user (Owner Only)
 broadcast - Broadcast a message (Owner Only)
-users - Show total users (Owner Only)
 stats - Show bot statistics (Owner Only)
 log - Get log file (Owner Only)
 delete - Delete messages from update channel (Owner Only)

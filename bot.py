@@ -7,7 +7,7 @@ from asyncio import create_subprocess_exec, gather
 from pyrogram.types import User
 from pyrogram import Client, enums, filters
 from pyrogram.types import InlineKeyboardMarkup, InlineKeyboardButton
-from pyrogram.errors import FloodWait, UserIsBlocked, InputUserDeactivated, WebpageCurlFailed, WebpageMediaEmpty, MessageNotModified
+from pyrogram.errors import FloodWait, UserIsBlocked, InputUserDeactivated, WebpageCurlFailed, WebpageMediaEmpty, MessageNotModified, UserNotParticipant
 from asyncio import Queue
 from config import *
 from utils import *
@@ -51,7 +51,9 @@ async def load_initial_data():
         'URLSHORTX_API_TOKEN': db_config.get('URLSHORTX_API_TOKEN', URLSHORTX_API_TOKEN),
         'TUT_ID': int(db_config.get('TUT_ID', TUT_ID)),
         'DAILY_LIMIT': int(db_config.get('DAILY_LIMIT', DAILY_LIMIT)),
-        'TOKEN_TIMEOUT': int(db_config.get('TOKEN_TIMEOUT', TOKEN_TIMEOUT))
+        'TOKEN_TIMEOUT': int(db_config.get('TOKEN_TIMEOUT', TOKEN_TIMEOUT)),
+        'FORCE_SUB_CHANNEL': db_config.get('FORCE_SUB_CHANNEL', FORCE_SUB_CHANNEL),
+        'AUTO_DELETE_TIME': int(db_config.get('AUTO_DELETE_TIME', AUTO_DELETE_TIME))
     }
 
     logger.info("Successfully loaded all user data and dynamic config from the database.")
@@ -72,6 +74,9 @@ bot_username = bot.me.username
 async def start_command(client, message):
     try:
         user_id = message.from_user.id
+
+        if not await check_force_sub(client, message, user_id):
+            return
 
         if not await present_user(user_id):
             try:
@@ -184,10 +189,12 @@ async def start_command(client, message):
             media = file_message.video or file_message.audio or file_message.document
             if media:
                 caption = await remove_extension(file_message.caption.html or "")
-                copy_message = await safe_api_call(file_message.copy(chat_id=message.chat.id, caption=f"<b>{caption}</b>", parse_mode=enums.ParseMode.HTML))
+                auto_delete_time = bot_config.get('AUTO_DELETE_TIME', 60)
+                warning = f"\n\n<b>⚠️ This file will be deleted in {auto_delete_time} seconds!</b>"
+                copy_message = await safe_api_call(file_message.copy(chat_id=message.chat.id, caption=f"<b>{caption}</b>{warning}", parse_mode=enums.ParseMode.HTML))
                 await increment_file_count(user_id)
                 user_data[user_id]['file_count'] += 1
-                await auto_delete_message(message, copy_message)
+                await auto_delete_message(message, copy_message, auto_delete_time)
             else:
                 await auto_delete_message(message, await message.reply_text("File not found or inaccessible."))
             return
@@ -468,6 +475,8 @@ async def settings_command(client, message):
         [InlineKeyboardButton(f"Tutorial ID: {bot_config.get('TUT_ID')}", callback_data="set_tut_id")],
         [InlineKeyboardButton(f"Daily Limit: {bot_config.get('DAILY_LIMIT')}", callback_data="set_daily_limit")],
         [InlineKeyboardButton(f"Token Timeout: {bot_config.get('TOKEN_TIMEOUT')}s", callback_data="set_token_timeout")],
+        [InlineKeyboardButton(f"Force Sub: {bot_config.get('FORCE_SUB_CHANNEL', 'Not Set')}", callback_data="set_force_sub")],
+        [InlineKeyboardButton(f"Auto Delete: {bot_config.get('AUTO_DELETE_TIME')}s", callback_data="set_auto_delete")],
         [InlineKeyboardButton("🔄 Restart Bot", callback_data="restart_bot")],
         [InlineKeyboardButton("❌ Close", callback_data="close_settings")]
     ]
@@ -489,6 +498,10 @@ async def settings_callback(client, callback_query):
         prompt = "Send new <b>Daily Limit</b> (number of files):"
     elif action == "set_token_timeout":
         prompt = "Send new <b>Token Timeout</b> (in seconds):"
+    elif action == "set_force_sub":
+        prompt = "Send new <b>Force Sub Channel</b> (ID or Username/Link). Send '0' or 'None' to disable:"
+    elif action == "set_auto_delete":
+        prompt = "Send new <b>Auto Delete Time</b> (in seconds):"
     else:
         return
 
@@ -543,11 +556,23 @@ async def settings_callback(client, callback_query):
             else:
                 await callback_query.message.reply_text("Invalid number.")
                 return
+        elif action == "set_force_sub":
+            if new_value.lower() in ['0', 'none', 'null', '']:
+                new_value = None
+            key = 'FORCE_SUB_CHANNEL'
+        elif action == "set_auto_delete":
+            if new_value.isdigit():
+                key = 'AUTO_DELETE_TIME'
+                new_value = int(new_value)
+            else:
+                 await callback_query.message.reply_text("Invalid number.")
+                 return
 
         if key:
             await update_dynamic_config(key, new_value)
             bot_config[key] = new_value # Update runtime config
-            await user_response.reply_text(f"✅ <b>{key}</b> updated to <code>{new_value}</code>.\nRestart required for some changes to fully take effect in other modules.")
+            display_value = new_value if new_value is not None else "Not Set"
+            await user_response.reply_text(f"✅ <b>{key}</b> updated to <code>{display_value}</code>.\nRestart required for some changes to fully take effect in other modules.")
 
             # Show settings again
             await settings_command(client, user_response)
@@ -720,6 +745,54 @@ async def process_message(client, message):
 async def restart(client, message):
     os.system("python3 update.py")  
     os.execl(sys.executable, sys.executable, "bot.py")
+
+async def check_force_sub(client, message, user_id):
+    force_sub_channel = bot_config.get('FORCE_SUB_CHANNEL')
+    if not force_sub_channel:
+        return True
+
+    try:
+        user = await client.get_chat_member(force_sub_channel, user_id)
+        if user.status == enums.ChatMemberStatus.BANNED:
+            await message.reply_text("You are banned from the update channel. Contact admin.")
+            return False
+        return True
+    except UserNotParticipant:
+        try:
+            invite_link = await client.export_chat_invite_link(force_sub_channel)
+        except Exception:
+            # Fallback if bot can't export link (maybe public channel)
+            if str(force_sub_channel).startswith("-100"):
+                 # It's an ID, difficult to guess link if not public/admin
+                 invite_link = "Please contact admin for link."
+            else:
+                 # It's likely a username
+                 invite_link = f"https://t.me/{force_sub_channel}" if not str(force_sub_channel).startswith("http") else force_sub_channel
+
+        join_button = InlineKeyboardButton("📢 Join Channel", url=invite_link)
+
+        # Preserve original start command args
+        username = client.me.username or bot_username
+        if len(message.command) > 1:
+            start_arg = message.command[1]
+            try_again_url = f"https://t.me/{username}?start={start_arg}"
+        else:
+             try_again_url = f"https://t.me/{username}?start=start"
+
+        try_again_button = InlineKeyboardButton("🔄 Try Again", url=try_again_url)
+
+        text = "<b>👋 You must join our channel to use this bot.\n\nPLEASE JOIN OUR CHANNEL TO GET FILES 👇</b>"
+        await message.reply_text(
+            text,
+            reply_markup=InlineKeyboardMarkup([[join_button], [try_again_button]]),
+            parse_mode=enums.ParseMode.HTML
+        )
+        return False
+    except Exception as e:
+        logger.error(f"Force sub check error: {e}")
+        # In case of error (e.g. invalid channel ID), let the user pass to avoid blocking them completely
+        # or notify admin. For now, letting them pass is safer for UX if config is bad.
+        return True
 
 async def verify_token(user_id, input_token):
     current_time = tm()

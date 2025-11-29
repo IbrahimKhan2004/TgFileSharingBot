@@ -60,6 +60,24 @@ The bot operates using a multi-channel system and a token verification process f
 *   **Restart & Update:** Owner can restart and update the bot via commands.
 *   **Flask Web App:** Includes a minimal Flask app, likely for health checks on hosting platforms.
 
+## Statistics and Monitoring
+
+The bot includes features for monitoring its usage and ensuring system health.
+
+*   **/stats Command (Owner Only):**
+    *   Provides a summary of bot statistics.
+    *   **Total Users:** The overall number of users who have ever started the bot.
+    *   **New Verifications Today:** A counter for how many users have successfully verified on the current day. This number resets to zero at midnight (IST).
+    *   **Files Shared Today:** A counter for the total number of files downloaded by all users on the current day. This also resets to zero at midnight (IST).
+
+*   **Daily Reset Mechanism:**
+    *   The daily statistics are designed to be **restart-proof**. If the bot is offline at midnight, it will automatically run the reset the moment it comes back online, ensuring you never have incorrect or missed daily stats.
+    *   This reset process is **safe** and only affects the daily statistics. It **does not** interfere with user data, token timers, or personal file limits.
+
+*   **Token Expiration Notifications:**
+    *   When a user's token expires (based on `TOKEN_TIMEOUT`), the bot will automatically detect it and send them a notification message prompting them to get a new token.
+    *   A user's personal file download limit (`DAILY_LIMIT`) is tied directly to their token. It resets to zero **only** when they successfully verify with a new token, not on a daily schedule.
+
 ## Channel Configuration Explained
 
 To use this bot, you **must** create three Telegram channels and configure the bot with their IDs:

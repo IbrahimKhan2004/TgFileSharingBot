@@ -163,38 +163,63 @@ async def is_user_banned(user_id: int):
             return False
     return False
 
-async def daily_reset_stats():
-    """Resets daily stats (file_count, status, time, inittime) for all users if a day has passed."""
-    
+# --- New Daily Statistics Functions ---
+
+STATS_ID = "daily_stats_v2" # Single document ID for daily stats
+
+async def get_daily_stats():
+    """Retrieves the daily statistics document."""
+    stats = await daily_stats.find_one({'_id': STATS_ID})
+    if not stats:
+        # Initialize if it doesn't exist
+        return {'verified_today': 0, 'files_shared_today': 0}
+    return stats
+
+async def increment_verified_today():
+    """Increments the count of users verified today."""
+    await daily_stats.update_one(
+        {'_id': STATS_ID},
+        {'$inc': {'verified_today': 1}},
+        upsert=True
+    )
+
+async def increment_files_shared_today():
+    """Increments the count of files shared today."""
+    await daily_stats.update_one(
+        {'_id': STATS_ID},
+        {'$inc': {'files_shared_today': 1}},
+        upsert=True
+    )
+
+# --- End New Daily Statistics Functions ---
+
+async def reset_daily_stats_v2():
+    """Resets only the daily statistics counters."""
     TZ_IST = ZoneInfo("Asia/Kolkata")
-    stats_doc = await daily_stats.find_one({'_id': 'daily_reset'})
+    stats_doc = await daily_stats.find_one({'_id': STATS_ID})
+
     last_reset_timestamp = 0
-    if stats_doc and isinstance(stats_doc.get('last_reset', 0), (int, float)):
-        last_reset_timestamp = stats_doc.get('last_reset', 0)
+    if stats_doc and 'last_reset' in stats_doc:
+        last_reset_timestamp = stats_doc['last_reset']
 
     try:
         last_reset_date = datetime.fromtimestamp(last_reset_timestamp, tz=TZ_IST).date()
-    except Exception:
+    except (TypeError, ValueError):
+        # Handle cases where last_reset is not a valid timestamp or doesn't exist
         last_reset_date = datetime.now(TZ_IST).date() - timedelta(days=1)
 
     current_date = datetime.now(TZ_IST).date()
 
     if current_date != last_reset_date:
-        await user_data.update_many(
-            {},
+        await daily_stats.update_one(
+            {'_id': STATS_ID},
             {
                 '$set': {
-                    'file_count': 0,
-                    'status': 'unverified',
-                    'time': 0,
-                    'bypass_attempts': 0,
-                    'inittime': 0
+                    'verified_today': 0,
+                    'files_shared_today': 0,
+                    'last_reset': tm()
                 }
-            }
-        )
-        await daily_stats.update_one(
-            {'_id': 'daily_reset'},
-            {'$set': {'last_reset': tm()}},
+            },
             upsert=True
         )
         return True

@@ -18,8 +18,8 @@ from database import (
     ban_user, is_user_banned, unban_user,
     get_bypass_attempts, increment_bypass_attempts,
     update_user_data, get_user_data, increment_file_count, load_all_user_data,
-    daily_reset_stats, save_shortener_link, get_dynamic_config, update_dynamic_config,
-    get_expired_users
+    reset_daily_stats_v2, save_shortener_link, get_dynamic_config, update_dynamic_config,
+    get_expired_users, increment_verified_today, increment_files_shared_today, get_daily_stats
 )
 import urllib.parse
 from datetime import datetime, timedelta, timezone
@@ -207,6 +207,7 @@ async def start_command(client, message):
                 warning = f"\n\n<b>⚠️ This file will be deleted in {auto_delete_time} seconds!</b>"
                 copy_message = await safe_api_call(file_message.copy(chat_id=message.chat.id, caption=f"<b>{caption}</b>{warning}", parse_mode=enums.ParseMode.HTML))
                 await increment_file_count(user_id)
+                await increment_files_shared_today() # New line to track daily file shares
                 user_data[user_id]['file_count'] += 1
                 await auto_delete_message(message, copy_message, auto_delete_time)
             else:
@@ -380,11 +381,10 @@ async def get_stats(client, message):
     users = await full_userbase()
     total_users = len(users)
 
-    # Calculate current verified users from local cache (approximation)
-    verified_users = sum(1 for data in user_data.values() if data.get('status') == 'verified')
-    
-    # Calculate total files shared today (since last bot start and token refresh)
-    files_shared = sum(data.get('file_count', 0) for data in user_data.values())
+    # Get daily stats
+    daily_stats_data = await get_daily_stats()
+    verified_today = daily_stats_data.get('verified_today', 0)
+    files_shared_today = daily_stats_data.get('files_shared_today', 0)
 
     token_timeout = bot_config.get('TOKEN_TIMEOUT', TOKEN_TIMEOUT)
     daily_limit = bot_config.get('DAILY_LIMIT', DAILY_LIMIT)
@@ -392,8 +392,11 @@ async def get_stats(client, message):
     stats_text = (
         "📊 <b>BOT STATISTICS</b> 📊\n\n"
         f"<b>Total Users:</b> <code>{total_users}</code>\n"
-        f"<b>Verified Users (Active):</b> <code>{verified_users}</code>\n"
-        f"<b>Total Files Shared:</b> <code>{files_shared}</code>\n"
+        "--- \n"
+        "<b>Today's Stats (Resets at Midnight)</b>\n"
+        f"<b>New Verifications Today:</b> <code>{verified_today}</code>\n"
+        f"<b>Files Shared Today:</b> <code>{files_shared_today}</code>\n"
+        "--- \n"
         f"<b>Token Timeout:</b> <code>{get_readable_time(token_timeout)}</code>\n"
         f"<b>Daily File Limit:</b> <code>{daily_limit}</code> files"
     )
@@ -827,6 +830,7 @@ async def verify_token(user_id, input_token):
         new_token = str(uuid.uuid4())
         new_data = {"token": new_token, "time": current_time, "status": "verified", "file_count": 0, "inittime": current_time}
         await update_user_data(user_id, new_data)
+        await increment_verified_today() # New line to track daily verifications
         user_data[user_id] = {**udata, **new_data} # Update local cache
         token_timeout = bot_config.get('TOKEN_TIMEOUT', TOKEN_TIMEOUT)
         return f'Token Verified ✅ (Validity: {get_readable_time(token_timeout)})'
@@ -970,9 +974,8 @@ async def daily_reset_scheduler():
     global user_data
     while True:
         # Run reset immediately on startup if needed
-        if await daily_reset_stats():
-            user_data = await load_all_user_data() # Reload data after reset
-            await bot.send_message(LOG_CHANNEL_ID, "Daily stats reset performed successfully by scheduler.")
+        if await reset_daily_stats_v2():
+            await bot.send_message(LOG_CHANNEL_ID, "✅ Daily statistics have been reset successfully.")
 
         # Use ZoneInfo for Asia/Kolkata (IST)
         TZ_IST = ZoneInfo("Asia/Kolkata")

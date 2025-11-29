@@ -960,14 +960,19 @@ async def greet_user(message):
 
     greeting_text = (
         f"Hello {user_link}, 👋\n\n"
-        "Welcome to FileShare Bot! 🌟\n\n"
-        "Here, you can easily access files.\n"
-        "<b>○ Creator : <b>TG⚡️FLIX</b>"
-        "\n<b>○ Language : Python</b>"
+        "Welcome to the official **TG⚡️FLIX Bot**! 🌟\n\n"
+        "This is your personal delivery bot, where all your requested files will arrive.\n\n"
+        "**How to get a file:**\n"
+        "1. Browse our main channel.\n"
+        "2. Tap the \"Send in DM\" button on any post.\n"
+        "3. The file will be sent here!\n\n"
+        "**Pro Tip:** You can always check your verification status and file limit by sending the `/me` command.\n\n"
+        "Enjoy the show! 🎬"
     )
 
     rply = await message.reply_text(
-        text=greeting_text
+        text=greeting_text,
+        disable_web_page_preview=True
         )
     
     await auto_delete_message(message, rply)

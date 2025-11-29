@@ -971,7 +971,7 @@ async def greet_user(message):
         "1. Browse our main channel.\n"
         "2. Tap the \"Send in DM\" button on any post.\n"
         "3. The file will be sent here!\n\n"
-        "<b>Pro Tip:</b> You can always check your verification status and file limit by sending the `/me` command.\n\n"
+        "<b>Pro Tip:</b> You can always check your verification status and file limit by sending the <code>/me</code> command.\n\n"
         "Enjoy the show! 🎬"
     )
 

@@ -49,6 +49,7 @@ The bot operates using a multi-channel system and a token verification process f
     *   Tokens have a configurable timeout (`TOKEN_TIMEOUT`).
     *   Daily download limit per user (`DAILY_LIMIT`).
 *   **URL Shortener for Token Links:** Uses an external URL shortener for the token acquisition links.
+*   **Force Subscription (Optional):** Requires users to join a specific channel before using the bot.
 *   **Channel-Based Organization:**
     *   `DB_CHANNEL_ID`: Secure file storage.
     *   `UPDATE_CHANNEL_ID`: Public-facing channel for file discovery.
@@ -105,6 +106,8 @@ Create a `config.env` file in the root directory or set these environment variab
 | `SHORTERNER_URL`      | Base domain of your URL shortener service (e.g., `urlshortx.com` or your self-hosted instance).            | `urlshortx.com`                    |
 | `TOKEN_TIMEOUT`       | Duration in seconds for how long a verified token remains valid. (8 hours = 28800)                         | `28800`                            |
 | `DAILY_LIMIT`         | Maximum number of files a user can download per token validity period.                                     | `10`                               |
+| `FORCE_SUB_CHANNEL`   | (Optional) Channel ID or Link that users must join to use the bot.                                         | `-100xxxx` or `https://t.me/xxxx`  |
+| `AUTO_DELETE_TIME`    | (Optional) Time in seconds to auto-delete sent files. Defaults to 60s.                                     | `60`                               |
 | `CONFIG_FILE_URL`     | (Optional) A direct URL to a `config.env` file. If set, the bot will try to download it on startup/update. |                                    |
 | `UPSTREAM_REPO`       | (Optional) Git repository URL for bot updates (used by `update.py`). Defaults to original repo.            |                                    |
 | `UPSTREAM_BRANCH`     | (Optional) Git repository branch for bot updates. Defaults to `main`.                                      |                                    |

@@ -35,6 +35,20 @@ message_queue = Queue()
 user_data = {}
 bot_config = {}
 
+def clean_force_sub_url(url_str):
+    if not url_str:
+        return None
+    url_str = str(url_str).strip()
+    if url_str.isdigit() or (url_str.startswith("-100") and url_str[4:].isdigit()):
+         return int(url_str)
+
+    # Simple regex to strip common URL prefixes
+    # t.me/, telegram.me/, telegram.dog/, https://...
+    if "/" in url_str:
+        return url_str.split("/")[-1]
+
+    return url_str
+
 # PROGRAM BOT INITIALIZATION 
 
 async def load_initial_data():
@@ -52,7 +66,7 @@ async def load_initial_data():
         'TUT_ID': int(db_config.get('TUT_ID', TUT_ID)),
         'DAILY_LIMIT': int(db_config.get('DAILY_LIMIT', DAILY_LIMIT)),
         'TOKEN_TIMEOUT': int(db_config.get('TOKEN_TIMEOUT', TOKEN_TIMEOUT)),
-        'FORCE_SUB_CHANNEL': db_config.get('FORCE_SUB_CHANNEL', FORCE_SUB_CHANNEL),
+        'FORCE_SUB_CHANNEL': clean_force_sub_url(db_config.get('FORCE_SUB_CHANNEL', FORCE_SUB_CHANNEL)),
         'AUTO_DELETE_TIME': int(db_config.get('AUTO_DELETE_TIME', AUTO_DELETE_TIME))
     }
 
@@ -559,6 +573,8 @@ async def settings_callback(client, callback_query):
         elif action == "set_force_sub":
             if new_value.lower() in ['0', 'none', 'null', '']:
                 new_value = None
+            else:
+                new_value = clean_force_sub_url(new_value)
             key = 'FORCE_SUB_CHANNEL'
         elif action == "set_auto_delete":
             if new_value.isdigit():
@@ -752,6 +768,7 @@ async def check_force_sub(client, message, user_id):
         return True
 
     try:
+        force_sub_channel = clean_force_sub_url(force_sub_channel)
         user = await client.get_chat_member(force_sub_channel, user_id)
         if user.status == enums.ChatMemberStatus.BANNED:
             await message.reply_text("You are banned from the update channel. Contact admin.")

@@ -132,6 +132,7 @@ async def safe_api_call(coro):
     """Utility wrapper to add delay before every bot API call."""
     while True:
         try:
+            await asyncio.sleep(0.1)
             return await coro
         except FloodWait as e:
             logger.error(f"FloodWait: Sleeping for {e.value} seconds")

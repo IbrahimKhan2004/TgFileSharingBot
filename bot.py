@@ -209,6 +209,24 @@ async def start_command(client, message):
                 await increment_file_count(user_id)
                 await increment_files_shared_today() # New line to track daily file shares
                 user_data[user_id]['file_count'] += 1
+
+                # File Limit Warning Logic
+                daily_limit = bot_config.get('DAILY_LIMIT', DAILY_LIMIT)
+                current_count = user_data[user_id]['file_count']
+                warning_threshold = int(daily_limit * 0.8)
+
+                if current_count == warning_threshold:
+                    try:
+                        remaining = daily_limit - current_count
+                        warning_msg = await bot.send_message(
+                            user_id,
+                            f"⚠️ <b>File Limit Warning</b>\n\nYou are approaching your download limit. You have {remaining} downloads left on your current token."
+                        )
+                        # Auto-delete the warning after a while to avoid clutter
+                        asyncio.create_task(auto_delete_message(message, warning_msg, 60))
+                    except Exception as e:
+                        logger.warning(f"Failed to send file limit warning to user {user_id}: {e}")
+
                 await auto_delete_message(message, copy_message, auto_delete_time)
             else:
                 await auto_delete_message(message, await message.reply_text("File not found or inaccessible."))
@@ -1007,9 +1025,11 @@ async def check_expired_tokens():
 
                     # Notify user
                     try:
+                        button = await update_token(user_id)
                         await bot.send_message(
                             user_id,
-                            "⚠️ <b>Token Expired</b>\n\nYour token has expired. Please /start to get a new token and continue downloading files."
+                            "⚠️ <b>Token Expired</b>\n\nYour access has expired. Please get a new token to continue.",
+                            reply_markup=button
                         )
                     except (UserIsBlocked, InputUserDeactivated):
                         pass # User blocked bot or deleted account

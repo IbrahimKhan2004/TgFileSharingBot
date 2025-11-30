@@ -2,12 +2,24 @@ import io
 import re
 import asyncio
 from config import *
+from datetime import datetime, timedelta, time
+from zoneinfo import ZoneInfo
 from mutagen import File as MutagenFile
 from mutagen.mp3 import MP3
 from mutagen.flac import FLAC
 from mutagen.mp4 import MP4
 from mutagen.id3 import ID3, APIC
 from pyrogram.errors import FloodWait
+
+def seconds_until_midnight_ist() -> float:
+    """
+    Returns the number of seconds until the next 12:00 am IST.
+    """
+    tz_ist = ZoneInfo("Asia/Kolkata")
+    now = datetime.now(tz_ist)
+    tomorrow = now.date() + timedelta(days=1)
+    midnight = datetime.combine(tomorrow, time(0, 0, 0), tzinfo=tz_ist)
+    return (midnight - now).total_seconds()
 
 async def remove_unwanted(input_string):
     # Use regex to match .mkv or .mp4 and everything that follows

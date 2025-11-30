@@ -22,7 +22,7 @@ from database import (
     get_expired_users, increment_verified_today, increment_files_shared_today, get_daily_stats
 )
 import urllib.parse
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timedelta, timezone, time
 from zoneinfo import ZoneInfo
 
 asyncio.set_event_loop_policy(uvloop.EventLoopPolicy())
@@ -999,19 +999,17 @@ async def get_user_link(user: User) -> str:
 async def daily_reset_scheduler():
     global user_data
     while True:
-        # Run reset immediately on startup if needed
-        if await reset_daily_stats_v2():
-            await bot.send_message(LOG_CHANNEL_ID, "✅ Daily statistics have been reset successfully.")
+        try:
+            # Run reset immediately on startup if needed
+            if await reset_daily_stats_v2():
+                await safe_api_call(bot.send_message(LOG_CHANNEL_ID, "✅ Daily statistics have been reset successfully."))
 
-        # Use ZoneInfo for Asia/Kolkata (IST)
-        TZ_IST = ZoneInfo("Asia/Kolkata")
-        now = datetime.now(TZ_IST)
-        # Calculate time until next midnight (00:00 IST)
-        next_midnight = now.replace(hour=0, minute=0, second=0, microsecond=0, tzinfo=TZ_IST) + timedelta(days=1)
-        sleep_duration = (next_midnight - now).total_seconds()
-        
-        logger.info(f"Daily reset scheduled to run in {sleep_duration:.0f} seconds.")
-        await asyncio.sleep(sleep_duration) 
+            sleep_duration = seconds_until_midnight_ist()
+            logger.info(f"Daily reset scheduled to run in {sleep_duration:.0f} seconds.")
+            await asyncio.sleep(sleep_duration)
+        except Exception as e:
+            logger.error(f"Error in daily_reset_scheduler: {e}")
+            await asyncio.sleep(60)  # Retry after 1 minute if error occurs
 
 async def check_expired_tokens():
     global user_data

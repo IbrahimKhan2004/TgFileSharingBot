@@ -1,6 +1,5 @@
 import uvloop
 import asyncio
-import re
 import uuid
 import sys
 from time import time as tm
@@ -721,21 +720,9 @@ async def process_message(client, message):
             audio_thumb = await get_audio_thumbnail(audio_path)
 
         file_id = message.id
-
-        base_caption = message.caption.html if message.caption else ""
-
-        if base_caption:
-            modified_caption = re.sub(r'@\w+', '@EliteflixBackup', base_caption, flags=re.IGNORECASE)
-            v_info = f"{modified_caption}\n\n<blockquote expandable><b>{file_name}</b></blockquote>\n<blockquote><b>{file_size}</b></blockquote>\n<blockquote><b>{duration}</b></blockquote>"
-        else:
-            v_info = f"<blockquote expandable><b>{file_name}</b></blockquote>\n<blockquote><b>{file_size}</b></blockquote>\n<blockquote><b>{duration}</b></blockquote>"
-
+        v_info = f"<blockquote expandable><b>{file_name}</b></blockquote>\n<blockquote><b>{file_size}</b></blockquote>\n<blockquote><b>{duration}</b></blockquote>"
         if message.audio:
-            if base_caption:
-                # `modified_caption` is already available from above
-                a_info = f"{modified_caption}\n\n<blockquote><b>{media.title}</b></blockquote>\n<blockquote><b>{media.performer}</b></blockquote>"
-            else:
-                a_info = f"<blockquote ><b>{media.title}</b></blockquote>\n<blockquote><b>{media.performer}</b></blockquote>"
+            a_info = f"<blockquote ><b>{media.title}</b></blockquote>\n<blockquote><b>{media.performer}</b></blockquote>"
 
         keyboard = InlineKeyboardMarkup([[InlineKeyboardButton("Send in DM", url=f"https://telegram.dog/{bot_username}?start={file_id}")]])
 

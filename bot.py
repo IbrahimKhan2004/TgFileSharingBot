@@ -246,14 +246,6 @@ async def start_command(client, message):
 
 @bot.on_message(filters.chat(DB_CHANNEL_ID) & (filters.document | filters.video | filters.audio | filters.sticker))
 async def handle_new_message(client, message):
-    if message.caption:
-        try:
-            new_caption = re.sub(r'@\w+', '@EliteflixBackup', message.caption, flags=re.IGNORECASE)
-            if new_caption != message.caption:
-                await message.edit_caption(new_caption)
-        except Exception as e:
-            logger.error(f"Failed to edit caption for message {message.id} in DB_CHANNEL_ID: {e}")
-
     # Add the message to the queue for sequential processing
     await message_queue.put(message)
     

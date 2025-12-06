@@ -9,7 +9,7 @@ from mutagen.mp3 import MP3
 from mutagen.flac import FLAC
 from mutagen.mp4 import MP4
 from mutagen.id3 import ID3, APIC
-from pyrogram.errors import FloodWait
+from pyrogram.errors import FloodWait, UserIsBlocked, InputUserDeactivated, PeerIdInvalid, UserIsBot
 
 def seconds_until_midnight_ist() -> float:
     """
@@ -144,14 +144,24 @@ async def get_audio_thumbnail(audio_path):
             return io.BytesIO(cover)
     return None
 
-async def safe_api_call(coro):
-    """Utility wrapper to add delay before every bot API call."""
-    while True:
+async def safe_api_call(coro_factory, max_retries=3):
+    """Utility wrapper to add delay and retry for flood waits."""
+    retries = 0
+    while retries < max_retries:
         try:
-            await asyncio.sleep(0.1)
-            return await coro
+            return await coro_factory()
+        except (UserIsBlocked, InputUserDeactivated, PeerIdInvalid, UserIsBot) as e:
+            raise e
         except FloodWait as e:
-            logger.error(f"FloodWait: Sleeping for {e.value} seconds")
-            await asyncio.sleep(e.value)
-        except Exception:
-            raise
+            retries += 1
+            if retries < max_retries:
+                sleep_duration = e.value * 1.2
+                logger.warning(f"FloodWait: Sleeping for {sleep_duration:.2f} seconds before retrying. Attempt {retries}/{max_retries}")
+                await asyncio.sleep(sleep_duration)
+            else:
+                logger.error(f"FloodWait limit reached after {max_retries} attempts. Giving up. {e}")
+                return None
+        except Exception as e:
+            logger.error(f"An error occurred during an API call: {e}")
+            return None
+    return None

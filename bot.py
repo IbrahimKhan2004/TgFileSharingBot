@@ -112,11 +112,11 @@ async def start_command(client, message):
             # Handle token flow
             if command_arg == "token":
                 tut_id = bot_config.get('TUT_ID', TUT_ID)
-                msg = await safe_api_call(bot.get_messages(LOG_CHANNEL_ID, tut_id))
-                sent_msg = await safe_api_call(msg.copy(chat_id=message.chat.id))
-                await safe_api_call(message.delete())
+                msg = await safe_api_call(lambda: bot.get_messages(LOG_CHANNEL_ID, tut_id))
+                sent_msg = await safe_api_call(lambda: msg.copy(chat_id=message.chat.id))
+                await safe_api_call(lambda: message.delete())
                 await asyncio.sleep(300)
-                await safe_api_call(sent_msg.delete())
+                await safe_api_call(lambda: sent_msg.delete())
                 return
 
             # Handle token verification
@@ -124,7 +124,7 @@ async def start_command(client, message):
                 input_token = command_arg[6:]
                 
                 if user_data.get(user_id, {}).get('status') == 'verified':
-                    reply = await safe_api_call(message.reply_text("You are already verified! ✅"))
+                    reply = await safe_api_call(lambda: message.reply_text("You are already verified! ✅"))
                     await auto_delete_message(message, reply)
                     return
 
@@ -147,7 +147,7 @@ async def start_command(client, message):
                                 f"This is your first warning for attempting to bypass the verification process. "
                                 f"Please follow the proper steps. Further attempts will result in a ban."
                             )
-                            reply = await safe_api_call(message.reply_text(warning_message))
+                            reply = await safe_api_call(lambda: message.reply_text(warning_message))
                             await auto_delete_message(message, reply)
                             return
                         elif attempts == 2:
@@ -179,20 +179,20 @@ async def start_command(client, message):
                             f"Time taken: {duration:.2f} seconds (Min required: {min_duration} seconds)\n"
                             f"Token: <code>{input_token}</code>"
                         )
-                        await safe_api_call(bot.send_message(LOG_CHANNEL_ID, log_message, parse_mode=enums.ParseMode.HTML))
+                        await safe_api_call(lambda: bot.send_message(LOG_CHANNEL_ID, log_message, parse_mode=enums.ParseMode.HTML))
                         
                         warning_message = (
                             f"<b>Bypass Detected! 🚨</b>\n\n"
                             f"You have been <b>{ban_message}</b> for repeatedly attempting to bypass the verification process. "
                             f"Your token has been invalidated."
                         )
-                        reply = await safe_api_call(message.reply_text(warning_message))
+                        reply = await safe_api_call(lambda: message.reply_text(warning_message))
                         await auto_delete_message(message, reply)
                         return
                 
                 token_msg = await verify_token(user_id, input_token)
-                reply = await safe_api_call(message.reply_text(token_msg))
-                await safe_api_call(bot.send_message(LOG_CHANNEL_ID, f"User🕵️‍♂️{user_link} with 🆔 {user_id} @{bot_username} {token_msg}", parse_mode=enums.ParseMode.HTML))
+                reply = await safe_api_call(lambda: message.reply_text(token_msg))
+                await safe_api_call(lambda: bot.send_message(LOG_CHANNEL_ID, f"User🕵️‍♂️{user_link} with 🆔 {user_id} @{bot_username} {token_msg}", parse_mode=enums.ParseMode.HTML))
                 await auto_delete_message(message, reply)
                 return
 
@@ -201,13 +201,13 @@ async def start_command(client, message):
             if not await check_access(message, user_id):
                 return
 
-            file_message = await safe_api_call(bot.get_messages(DB_CHANNEL_ID, file_id))
+            file_message = await safe_api_call(lambda: bot.get_messages(DB_CHANNEL_ID, file_id))
             media = file_message.video or file_message.audio or file_message.document
             if media:
                 caption = await remove_extension(file_message.caption.html or "")
                 auto_delete_time = bot_config.get('AUTO_DELETE_TIME', 60)
                 warning = f"\n\n<b>⚠️ This file will be deleted in {auto_delete_time} seconds!</b>"
-                copy_message = await safe_api_call(file_message.copy(chat_id=message.chat.id, caption=f"<b>{caption}</b>{warning}", parse_mode=enums.ParseMode.HTML))
+                copy_message = await safe_api_call(lambda: file_message.copy(chat_id=message.chat.id, caption=f"<b>{caption}</b>{warning}", parse_mode=enums.ParseMode.HTML))
                 await increment_file_count(user_id)
                 await increment_files_shared_today() # New line to track daily file shares
                 user_data[user_id]['file_count'] += 1
@@ -238,7 +238,7 @@ async def start_command(client, message):
         await greet_user(message)
         
     except ValueError:
-        reply = await safe_api_call(message.reply_text("Invalid File ID."))
+        reply = await safe_api_call(lambda: message.reply_text("Invalid File ID."))
         await auto_delete_message(message, reply)
     except Exception as e:
         logger.error(f"Error in start command: {e}")
@@ -309,7 +309,7 @@ async def delete_messages_command(client, message):
             
             if messages_to_delete:
                 try:
-                    await safe_api_call(client.delete_messages(chat_id=UPDATE_CHANNEL_ID, message_ids=messages_to_delete))
+                    await safe_api_call(lambda: client.delete_messages(chat_id=UPDATE_CHANNEL_ID, message_ids=messages_to_delete))
                     deleted_count += len(messages_to_delete)
                     await message.reply_text(f"Messages {messages_to_delete[0]} to {messages_to_delete[-1]} deleted.")
                 except Exception as e:
@@ -794,7 +794,7 @@ async def process_message(client, message):
         if message.video:
             duration = TimeFormatter(media.duration * 1000)
             if media.thumbs:
-                thumbnail = await safe_api_call(bot.download_media(media.thumbs[0].file_id))
+                thumbnail = await safe_api_call(lambda: bot.download_media(media.thumbs[0].file_id))
             else:
                 thumbnail = None
         else:
@@ -803,7 +803,7 @@ async def process_message(client, message):
             movie_name, release_year = await extract_movie_info(file_name)
             poster_url = await get_by_name(movie_name, release_year)
         if message.audio:
-            audio_path = await safe_api_call(bot.download_media(message.audio.file_id))
+            audio_path = await safe_api_call(lambda: bot.download_media(message.audio.file_id))
             audio_thumb = await get_audio_thumbnail(audio_path)
 
         file_id = message.id
@@ -815,7 +815,7 @@ async def process_message(client, message):
 
         try:           
             if poster_url:
-                await safe_api_call(bot.send_photo(
+                await safe_api_call(lambda: bot.send_photo(
                     UPDATE_CHANNEL_ID,
                     photo=poster_url,
                     caption=v_info,
@@ -823,7 +823,7 @@ async def process_message(client, message):
                     reply_markup=keyboard
                     ))
             elif thumbnail:
-                await safe_api_call(bot.send_photo(
+                await safe_api_call(lambda: bot.send_photo(
                     UPDATE_CHANNEL_ID,
                     photo=thumbnail,
                     caption=v_info,
@@ -831,7 +831,7 @@ async def process_message(client, message):
                     reply_markup=keyboard
                 ))
             elif not message.audio:
-                await safe_api_call(bot.send_message(
+                await safe_api_call(lambda: bot.send_message(
                     UPDATE_CHANNEL_ID,
                     text=v_info,
                     parse_mode=enums.ParseMode.HTML,
@@ -839,7 +839,7 @@ async def process_message(client, message):
                     ))
                 
             if message.audio:
-                await safe_api_call(bot.send_photo(
+                await safe_api_call(lambda: bot.send_photo(
                     UPDATE_CHANNEL_ID,
                     photo=audio_thumb,
                     caption=a_info,
@@ -850,7 +850,7 @@ async def process_message(client, message):
 
         except (WebpageMediaEmpty, WebpageCurlFailed):
             logger.info(f"{poster_url}")
-            await safe_api_call(bot.send_message(
+            await safe_api_call(lambda: bot.send_message(
                 UPDATE_CHANNEL_ID,
                 text=v_info,
                 parse_mode=enums.ParseMode.HTML,
@@ -862,10 +862,10 @@ async def process_message(client, message):
             await process_message(client, message)
 
         except Exception as e:
-            await safe_api_call(bot.send_message(OWNER_ID, text=f"Error in Proccessing MSG:{file_name} {e}"))
+            await safe_api_call(lambda: bot.send_message(OWNER_ID, text=f"Error in Proccessing MSG:{file_name} {e}"))
     
     elif message.sticker:
-        await safe_api_call(message.copy(UPDATE_CHANNEL_ID))
+        await safe_api_call(lambda: message.copy(UPDATE_CHANNEL_ID))
 
 
 @bot.on_message(filters.command('restart') & filters.private & filters.user(OWNER_ID))
@@ -1090,7 +1090,7 @@ async def daily_reset_scheduler():
         try:
             # Run reset immediately on startup if needed
             if await reset_daily_stats_v2():
-                await safe_api_call(bot.send_message(LOG_CHANNEL_ID, "✅ Daily statistics have been reset successfully."))
+                await safe_api_call(lambda: bot.send_message(LOG_CHANNEL_ID, "✅ Daily statistics have been reset successfully."))
 
             sleep_duration = seconds_until_midnight_ist()
             logger.info(f"Daily reset scheduled to run in {sleep_duration:.0f} seconds.")
@@ -1124,7 +1124,7 @@ async def check_expired_tokens():
                     logging.info(f"Attempting to notify user {user_id} of token expiry...")
                     try:
                         button = await update_token(user_id)
-                        await safe_api_call(bot.send_message(
+                        await safe_api_call(lambda: bot.send_message(
                             user_id,
                             "⚠️ <b>Token Expired</b>\n\nYour access has expired. Please get a new token to continue.",
                             reply_markup=button
@@ -1164,14 +1164,14 @@ async def prune_inactive_users_scheduler():
                 # Log the result
                 summary_message = f"✅ Automated Prune: Removed {deleted_count} inactive unverified users."
                 logging.info(summary_message)
-                await safe_api_call(bot.send_message(LOG_CHANNEL_ID, summary_message))
+                await safe_api_call(lambda: bot.send_message(LOG_CHANNEL_ID, summary_message))
             else:
                 logging.info("Automated Prune: No inactive users found to remove.")
 
         except Exception as e:
             error_message = f"Error in prune_inactive_users_scheduler: {e}"
             logging.error(error_message)
-            await safe_api_call(bot.send_message(LOG_CHANNEL_ID, error_message))
+            await safe_api_call(lambda: bot.send_message(LOG_CHANNEL_ID, error_message))
 
         # Sleep for 24 hours before the next run
         await asyncio.sleep(24 * 60 * 60)

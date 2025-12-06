@@ -687,6 +687,7 @@ async def verify_command(client, message):
         await message.reply_text(f"An error occurred: {e}")
 
 async def process_queue():
+    logging.info("Task started: process_queue")
     while True:
         message = await message_queue.get()  
         if message is None:  
@@ -997,6 +998,7 @@ async def get_user_link(user: User) -> str:
         return first_name
 
 async def daily_reset_scheduler():
+    logging.info("Task started: daily_reset_scheduler")
     global user_data
     while True:
         try:
@@ -1012,6 +1014,7 @@ async def daily_reset_scheduler():
             await asyncio.sleep(60)  # Retry after 1 minute if error occurs
 
 async def check_expired_tokens():
+    logging.info("Task started: check_expired_tokens")
     global user_data
     while True:
         try:
@@ -1054,9 +1057,12 @@ async def check_expired_tokens():
 
 async def main():
     await load_initial_data()
-    await asyncio.create_task(process_queue())
-    await asyncio.create_task(daily_reset_scheduler())
-    await asyncio.create_task(check_expired_tokens())
+    logging.info("Scheduling task: process_queue")
+    asyncio.create_task(process_queue())
+    logging.info("Scheduling task: daily_reset_scheduler")
+    asyncio.create_task(daily_reset_scheduler())
+    logging.info("Scheduling task: check_expired_tokens")
+    asyncio.create_task(check_expired_tokens())
     await asyncio.Event().wait()
 
 if __name__ == "__main__":

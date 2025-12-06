@@ -687,6 +687,91 @@ async def verify_command(client, message):
     except Exception as e:
         await message.reply_text(f"An error occurred: {e}")
 
+@bot.on_message(filters.private & filters.command("reset_limit") & filters.user(OWNER_ID))
+async def reset_limit_command(client, message):
+    if len(message.command) < 2:
+        await message.reply_text("Please provide a user ID. Usage: /reset_limit <user_id>")
+        return
+
+    try:
+        user_id_to_reset = int(message.command[1])
+    except ValueError:
+        await message.reply_text("Invalid User ID format.")
+        return
+
+    # Check if the user exists in the database
+    if not await present_user(user_id_to_reset):
+        await message.reply_text(f"❌ Error: User {user_id_to_reset} not found. They must start the bot at least once.")
+        return
+
+    # Check if the user is banned
+    if await is_user_banned(user_id_to_reset):
+        await message.reply_text(f"❌ Error: Cannot reset limit for User {user_id_to_reset} because they are currently banned.")
+        return
+
+    # Reset the file count
+    await update_user_data(user_id_to_reset, {'file_count': 0})
+    if user_id_to_reset in user_data:
+        user_data[user_id_to_reset]['file_count'] = 0
+
+    admin_confirmation = f"✅ User {user_id_to_reset}'s file limit has been reset to 0."
+
+    # Try to notify the user
+    try:
+        await bot.send_message(
+            user_id_to_reset,
+            "🎉 Good news! An admin has reset your daily file limit. You can continue downloading files."
+        )
+    except (UserIsBlocked, InputUserDeactivated):
+        admin_confirmation += "\n\n(User could not be notified as they may have blocked the bot)."
+    except Exception as e:
+        admin_confirmation += f"\n\n(Could not notify user due to an error: {e})."
+
+    await message.reply_text(admin_confirmation)
+
+@bot.on_message(filters.private & filters.command("expire_token") & filters.user(OWNER_ID))
+async def expire_token_command(client, message):
+    if len(message.command) < 2:
+        await message.reply_text("Please provide a user ID. Usage: /expire_token <user_id>")
+        return
+
+    try:
+        user_id_to_expire = int(message.command[1])
+    except ValueError:
+        await message.reply_text("Invalid User ID format.")
+        return
+
+    # Check if the user exists
+    if not await present_user(user_id_to_expire):
+        await message.reply_text(f"❌ Error: User {user_id_to_expire} not found. They must start the bot at least once.")
+        return
+
+    # Check if the user is banned
+    if await is_user_banned(user_id_to_expire):
+        await message.reply_text(f"❌ Error: Cannot expire token for User {user_id_to_expire} because they are already banned.")
+        return
+
+    # Expire the token by updating status and resetting time/file_count
+    update_data = {'status': 'unverified', 'time': 0, 'file_count': 0}
+    await update_user_data(user_id_to_expire, update_data)
+    if user_id_to_expire in user_data:
+        user_data[user_id_to_expire].update(update_data)
+
+    admin_confirmation = f"✅ User {user_id_to_expire}'s token has been manually expired."
+
+    # Try to notify the user
+    try:
+        await bot.send_message(
+            user_id_to_expire,
+            "❗️ Your token has been manually expired by an admin. You will need to re-verify to continue."
+        )
+    except (UserIsBlocked, InputUserDeactivated):
+        admin_confirmation += "\n\n(User could not be notified as they may have blocked the bot)."
+    except Exception as e:
+        admin_confirmation += f"\n\n(Could not notify user due to an error: {e})."
+
+    await message.reply_text(admin_confirmation)
+
 async def process_queue():
     logging.info("Task started: process_queue")
     while True:

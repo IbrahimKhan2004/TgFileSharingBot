@@ -1034,15 +1034,17 @@ async def check_expired_tokens():
                     # Notify user
                     try:
                         button = await update_token(user_id)
-                        await bot.send_message(
+                        await safe_api_call(bot.send_message(
                             user_id,
                             "⚠️ <b>Token Expired</b>\n\nYour access has expired. Please get a new token to continue.",
                             reply_markup=button
-                        )
+                        ))
                     except (UserIsBlocked, InputUserDeactivated):
                         pass # User blocked bot or deleted account
                     except Exception as e:
                         logger.warning(f"Failed to notify user {user_id} about expiry: {e}")
+                    
+                    await asyncio.sleep(1) # Prevent FloodWait
 
         except Exception as e:
             logger.error(f"Error in token expiry check: {e}")

@@ -195,7 +195,11 @@ async def increment_files_shared_today():
 
 async def reset_daily_stats_v2():
     """Resets only the daily statistics counters."""
-    TZ_IST = ZoneInfo("Asia/Kolkata")
+    try:
+        TZ_IST = ZoneInfo("Asia/Kolkata")
+    except Exception:
+        TZ_IST = timezone.utc
+
     stats_doc = await daily_stats.find_one({'_id': STATS_ID})
 
     last_reset_timestamp = 0

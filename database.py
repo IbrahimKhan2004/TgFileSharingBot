@@ -260,3 +260,23 @@ async def update_dynamic_config(key, value):
         {'$set': {key: value}},
         upsert=True
     )
+
+async def get_inactive_unverified_users(inactive_threshold):
+    """
+    Returns a list of user IDs for users who are 'unverified' and whose
+    'inittime' is older than the inactive_threshold.
+    """
+    query = {
+        'status': 'unverified',
+        'inittime': {'$lt': inactive_threshold}
+    }
+    cursor = user_data.find(query, {'_id': 1})
+    inactive_user_ids = [doc['_id'] async for doc in cursor]
+    return inactive_user_ids
+
+async def delete_users_bulk(user_ids):
+    """Deletes a list of users from the database in bulk."""
+    if not user_ids:
+        return 0
+    result = await user_data.delete_many({'_id': {'$in': user_ids}})
+    return result.deleted_count

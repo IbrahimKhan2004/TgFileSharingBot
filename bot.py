@@ -19,7 +19,8 @@ from database import (
     get_bypass_attempts, increment_bypass_attempts,
     update_user_data, get_user_data, increment_file_count, load_all_user_data,
     reset_daily_stats_v2, save_shortener_link, get_dynamic_config, update_dynamic_config,
-    get_expired_users, increment_verified_today, increment_files_shared_today, get_daily_stats
+    get_expired_users, increment_verified_today, increment_files_shared_today, get_daily_stats,
+    get_inactive_unverified_users, delete_users_bulk
 )
 import urllib.parse
 from datetime import datetime, timedelta, timezone, time
@@ -1061,6 +1062,35 @@ async def check_expired_tokens():
         # Check every 5 minutes
         await asyncio.sleep(300)
 
+async def prune_inactive_users_scheduler():
+    """A background task that runs once a day to prune inactive users."""
+    while True:
+        try:
+            # Set the inactivity period to 40 days
+            inactive_period_days = 40
+            inactive_threshold = tm() - (inactive_period_days * 24 * 60 * 60)
+
+            # Find and delete inactive users
+            inactive_user_ids = await get_inactive_unverified_users(inactive_threshold)
+
+            if inactive_user_ids:
+                deleted_count = await delete_users_bulk(inactive_user_ids)
+
+                # Log the result
+                summary_message = f"✅ Automated Prune: Removed {deleted_count} inactive unverified users."
+                logging.info(summary_message)
+                await safe_api_call(bot.send_message(LOG_CHANNEL_ID, summary_message))
+            else:
+                logging.info("Automated Prune: No inactive users found to remove.")
+
+        except Exception as e:
+            error_message = f"Error in prune_inactive_users_scheduler: {e}"
+            logging.error(error_message)
+            await safe_api_call(bot.send_message(LOG_CHANNEL_ID, error_message))
+
+        # Sleep for 24 hours before the next run
+        await asyncio.sleep(24 * 60 * 60)
+
 async def main():
     await load_initial_data()
     logging.info("Scheduling task: process_queue")
@@ -1069,6 +1099,8 @@ async def main():
     asyncio.create_task(daily_reset_scheduler())
     logging.info("Scheduling task: check_expired_tokens")
     asyncio.create_task(check_expired_tokens())
+    logging.info("Scheduling task: prune_inactive_users_scheduler")
+    asyncio.create_task(prune_inactive_users_scheduler())
     await asyncio.Event().wait()
 
 if __name__ == "__main__":

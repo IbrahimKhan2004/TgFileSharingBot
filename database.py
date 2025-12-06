@@ -19,8 +19,8 @@ config_collection = async_db['config']
 
 async def save_shortener_link(request_id: str, shortened_url: str):
     """Saves the shortened URL mapping."""
-    # Ensure TTL index exists (expires after 24 hours)
-    await shortener_requests.create_index("created_at", expireAfterSeconds=86400)
+    # Ensure TTL index exists (expires after 1 hours)
+    await shortener_requests.create_index("created_at", expireAfterSeconds=3600)
 
     await shortener_requests.insert_one({
         '_id': request_id,

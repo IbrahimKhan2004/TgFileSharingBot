@@ -19,8 +19,17 @@ config_collection = async_db['config']
 
 async def save_shortener_link(request_id: str, shortened_url: str):
     """Saves the shortened URL mapping."""
-    # Ensure TTL index exists (expires after 1 hours)
-    await shortener_requests.create_index("created_at", expireAfterSeconds=3600)
+    # Ensure TTL index exists (expires after 24 hours)
+    try:
+        await shortener_requests.create_index("created_at", expireAfterSeconds=86400)
+    except Exception as e:
+        if "IndexOptionsConflict" in str(e):
+             # Drop the old index if options conflict (e.g. diff expire time)
+             await shortener_requests.drop_index("created_at_1")
+             # Re-create with new options
+             await shortener_requests.create_index("created_at", expireAfterSeconds=86400)
+        else:
+            raise e
 
     await shortener_requests.insert_one({
         '_id': request_id,

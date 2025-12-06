@@ -20,7 +20,7 @@ from database import (
     update_user_data, get_user_data, increment_file_count, load_all_user_data,
     reset_daily_stats_v2, save_shortener_link, get_dynamic_config, update_dynamic_config,
     get_expired_users, increment_verified_today, increment_files_shared_today, get_daily_stats,
-    get_inactive_unverified_users, delete_users_bulk
+    get_inactive_unverified_users, delete_users_bulk, ensure_ttl_index
 )
 import urllib.parse
 from datetime import datetime, timedelta, timezone, time
@@ -1177,6 +1177,7 @@ async def prune_inactive_users_scheduler():
         await asyncio.sleep(24 * 60 * 60)
 
 async def main():
+    await ensure_ttl_index()
     await load_initial_data()
     logging.info("Scheduling task: process_queue")
     asyncio.create_task(process_queue())

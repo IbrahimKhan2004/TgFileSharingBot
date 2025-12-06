@@ -17,11 +17,32 @@ daily_stats = async_db['daily_stats']
 shortener_requests = async_db['shortener_requests']
 config_collection = async_db['config']
 
+async def ensure_ttl_index():
+    """
+    Ensures the TTL index on 'shortener_requests' collection is correctly set to 24 hours.
+    This function will automatically drop a conflicting index if it exists.
+    """
+    index_name = "created_at_1"
+    new_ttl = 86400  # 24 hours
+
+    try:
+        # Get existing index information
+        existing_indexes = await shortener_requests.index_information()
+        if index_name in existing_indexes:
+            existing_ttl = existing_indexes[index_name].get('expireAfterSeconds')
+            # If the TTL is different, drop the old index
+            if existing_ttl != new_ttl:
+                await shortener_requests.drop_index(index_name)
+
+        # Create the new index
+        await shortener_requests.create_index("created_at", expireAfterSeconds=new_ttl, name=index_name)
+    except Exception as e:
+        # This might fail if another process is creating it at the same time, which is fine.
+        # The important part is handling the conflict.
+        pass
+
 async def save_shortener_link(request_id: str, shortened_url: str):
     """Saves the shortened URL mapping."""
-    # Ensure TTL index exists (expires after 24 hours)
-    await shortener_requests.create_index("created_at", expireAfterSeconds=86400)
-
     await shortener_requests.insert_one({
         '_id': request_id,
         'shortened_url': shortened_url,

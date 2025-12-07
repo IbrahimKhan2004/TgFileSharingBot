@@ -1,4 +1,4 @@
 __pycache__/
-log.txt
-bot.session
 config.env
+bot.session
+*.log

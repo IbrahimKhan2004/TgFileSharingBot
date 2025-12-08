@@ -16,6 +16,7 @@ banned_users = async_db['banned_users']
 daily_stats = async_db['daily_stats']
 shortener_requests = async_db['shortener_requests']
 config_collection = async_db['config']
+processed_files = async_db['processed_files']
 
 async def save_shortener_link(request_id: str, shortened_url: str):
     """Saves the shortened URL mapping."""
@@ -289,3 +290,20 @@ async def delete_users_bulk(user_ids):
         return 0
     result = await user_data.delete_many({'_id': {'$in': user_ids}})
     return result.deleted_count
+
+async def get_processed_file(file_unique_id: str):
+    """
+    Checks if a file's unique ID exists in the processed_files collection.
+    Returns the document if found, otherwise None.
+    """
+    return await processed_files.find_one({'_id': file_unique_id})
+
+async def add_processed_file(file_unique_id: str, message_id: int):
+    """
+    Adds a file's unique ID and its corresponding message ID to the processed_files collection.
+    """
+    await processed_files.insert_one({
+        '_id': file_unique_id,
+        'message_id': message_id,
+        'timestamp': tm()
+    })

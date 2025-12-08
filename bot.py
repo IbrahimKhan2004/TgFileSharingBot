@@ -20,8 +20,7 @@ from database import (
     update_user_data, get_user_data, increment_file_count, load_all_user_data,
     reset_daily_stats_v2, save_shortener_link, get_dynamic_config, update_dynamic_config,
     get_expired_users, increment_verified_today, increment_files_shared_today, get_daily_stats,
-    get_inactive_unverified_users, delete_users_bulk,
-    get_processed_file, add_processed_file
+    get_inactive_unverified_users, delete_users_bulk
 )
 import urllib.parse
 from datetime import datetime, timedelta, timezone, time
@@ -248,44 +247,7 @@ async def start_command(client, message):
 
 @bot.on_message(filters.chat(DB_CHANNEL_ID) & (filters.document | filters.video | filters.audio | filters.sticker))
 async def handle_new_message(client, message):
-    media = message.document or message.video or message.audio
-    if not media:
-        # If it's a sticker or something else, just queue it
-        await message_queue.put(message)
-        return
-
-    file_unique_id = media.file_unique_id
-
-    # Pre-emptive duplicate check
-    existing_file = await get_processed_file(file_unique_id)
-    if existing_file:
-        original_msg_id = existing_file.get('message_id')
-
-        # Log the duplicate detection
-        log_message = (
-            f" DUPLICATE FILE DETECTED \n"
-            f" New Message ID in DB Channel: {message.id}\n"
-            f" Original Message ID in DB Channel: {original_msg_id}\n"
-            f" File Name: {media.file_name}\n"
-            f" File Unique ID: <code>{file_unique_id}</code>\n\n"
-            f" This duplicate has been deleted."
-        )
-        await safe_api_call(lambda: bot.send_message(LOG_CHANNEL_ID, log_message))
-
-        # Notify the owner
-        owner_notification = (
-            f"A file you just uploaded was detected as a duplicate and has been deleted.\n\n"
-            f"<b>File Name:</b> {media.file_name}\n"
-            f"It is a duplicate of a file originally processed with DB Channel Message ID: <code>{original_msg_id}</code>."
-        )
-        await safe_api_call(lambda: bot.send_message(OWNER_ID, owner_notification))
-
-        # Delete the duplicate file from the DB_CHANNEL_ID
-        await safe_api_call(lambda: message.delete())
-
-        return # Stop processing this message
-
-    # If not a duplicate, add to the queue for normal processing
+    # Add the message to the queue for sequential processing
     await message_queue.put(message)
     
 @bot.on_message(filters.private & filters.command("index") & filters.user(OWNER_ID))
@@ -904,10 +866,6 @@ async def process_message(client, message):
     
     elif message.sticker:
         await safe_api_call(lambda: message.copy(UPDATE_CHANNEL_ID))
-
-    # Add the file to the processed_files collection to prevent duplicates
-    if media:
-        await add_processed_file(media.file_unique_id, message.id)
 
 
 @bot.on_message(filters.command('restart') & filters.private & filters.user(OWNER_ID))

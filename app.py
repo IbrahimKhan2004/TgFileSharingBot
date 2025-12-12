@@ -50,39 +50,61 @@ async def human_gate():
 
         <script>
             async function checkBrowser() {
-                var userAgent = navigator.userAgent;
-                var vendor = navigator.vendor;
-                var isChrome = false;
+                let isChrome = false;
+                const ua = navigator.userAgent;
+                const vendor = navigator.vendor;
 
-                // Desktop/Android Chrome check
-                if (/Chrome/.test(userAgent) && /Google Inc/.test(vendor)) {
-                    isChrome = true;
-                }
-                // iOS Chrome check
-                if (/CriOS/.test(userAgent)) {
-                    isChrome = true;
-                }
-
-                // Exclude Edge
-                if (/Edg/.test(userAgent)) {
-                    isChrome = false;
-                }
-                // Exclude Opera
-                if (/OPR/.test(userAgent)) {
-                    isChrome = false;
-                }
-
-                // Exclude Brave
+                // 1. Brave Detection (High Priority) - Explicit Block
                 if (navigator.brave && await navigator.brave.isBrave()) {
-                    isChrome = false;
+                    showWarning();
+                    return;
+                }
+
+                // 2. iOS Chrome Check (CriOS) - WebKit based, no Client Hints
+                if (/CriOS/.test(ua)) {
+                    isChrome = true;
+                }
+                // 3. Modern Client Hints API (Desktop/Android)
+                else if (navigator.userAgentData && navigator.userAgentData.brands) {
+                    const brands = navigator.userAgentData.brands;
+                    const hasGoogleChrome = brands.some(b => b.brand === 'Google Chrome');
+                    const hasEdge = brands.some(b => b.brand === 'Microsoft Edge');
+                    const hasOpera = brands.some(b => b.brand === 'Opera');
+                    const hasBrave = brands.some(b => b.brand === 'Brave');
+
+                    // Must be Google Chrome and NOT Edge/Opera/Brave
+                    if (hasGoogleChrome && !hasEdge && !hasOpera && !hasBrave) {
+                        isChrome = true;
+                    }
+                }
+                // 4. Legacy Fallback (Regex)
+                else {
+                    const isGenericChrome = /Chrome/.test(ua) && /Google Inc/.test(vendor);
+                    const isEdge = /Edg/.test(ua);
+                    const isOpera = /OPR/.test(ua);
+
+                    if (isGenericChrome && !isEdge && !isOpera) {
+                        isChrome = true;
+                    }
                 }
 
                 if (isChrome) {
-                    document.getElementById('main-container').style.display = 'block';
+                    showMain();
                 } else {
-                    document.getElementById('warning-container').style.display = 'block';
+                    showWarning();
                 }
             }
+
+            function showMain() {
+                document.getElementById('main-container').style.display = 'block';
+                document.getElementById('warning-container').style.display = 'none';
+            }
+
+            function showWarning() {
+                document.getElementById('main-container').style.display = 'none';
+                document.getElementById('warning-container').style.display = 'block';
+            }
+
             checkBrowser();
         </script>
     </body>

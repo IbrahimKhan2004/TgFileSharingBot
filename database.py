@@ -17,7 +17,7 @@ daily_stats = async_db['daily_stats']
 shortener_requests = async_db['shortener_requests']
 config_collection = async_db['config']
 
-async def save_shortener_link(request_id: str, shortened_url: str, token: str = None):
+async def save_shortener_link(request_id: str, shortened_url: str):
     """Saves the shortened URL mapping."""
     # Ensure TTL index exists (expires after 24 hours)
     try:
@@ -34,48 +34,8 @@ async def save_shortener_link(request_id: str, shortened_url: str, token: str = 
     await shortener_requests.insert_one({
         '_id': request_id,
         'shortened_url': shortened_url,
-        'token': token,
         'created_at': datetime.utcnow()
     })
-
-async def update_gate_ip(request_id: str, ip: str):
-    """Updates the user's IP from the gate page."""
-    await shortener_requests.update_one(
-        {'_id': request_id},
-        {'$set': {'gate_ip': ip}}
-    )
-
-async def process_ip_check(token: str, current_ip: str):
-    """
-    Checks if the current IP matches the gate IP for the given token.
-    Returns True if matched, False otherwise.
-    """
-    if not token:
-        return False
-
-    req = await shortener_requests.find_one({'token': token})
-    if not req:
-        return False
-
-    gate_ip = req.get('gate_ip')
-    # If no gate_ip was recorded, it's a bypass (or error)
-    if not gate_ip:
-        is_verified = False
-    else:
-        is_verified = (gate_ip == current_ip)
-
-    await shortener_requests.update_one(
-        {'_id': req['_id']},
-        {'$set': {'ip_verified': is_verified}}
-    )
-    return is_verified
-
-async def is_ip_verified(token: str):
-    """Checks if the IP verification passed for the given token."""
-    req = await shortener_requests.find_one({'token': token})
-    if not req:
-        return False
-    return req.get('ip_verified', False)
 
 async def get_shortener_link_async(request_id: str):
     """Gets the shortened URL (Asynchronous for Flask)."""

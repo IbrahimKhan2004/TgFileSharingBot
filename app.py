@@ -49,7 +49,7 @@ async def human_gate():
         <div id="main-container" class="container">
             <h1>Human Verification</h1>
             <p>Click below to proceed to the token verification process. This helps us ensure you are not a bot.</p>
-            <a href="/verify/{{ request_id }}" class="button">Click Here to Proceed</a>
+            <button onclick="window.location.href='/verify/{{ request_id }}'" class="button">Click Here to Proceed</button>
         </div>
 
         <div id="warning-container" class="warning-container">

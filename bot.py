@@ -20,7 +20,7 @@ from database import (
     update_user_data, get_user_data, increment_file_count, load_all_user_data,
     reset_daily_stats_v2, save_shortener_link, get_dynamic_config, update_dynamic_config,
     get_expired_users, increment_verified_today, increment_files_shared_today, get_daily_stats,
-    get_inactive_unverified_users, delete_users_bulk
+    get_inactive_unverified_users, delete_users_bulk, is_ip_verified
 )
 import urllib.parse
 from datetime import datetime, timedelta, timezone, time
@@ -128,12 +128,24 @@ async def start_command(client, message):
                     await auto_delete_message(message, reply)
                     return
 
+                # Check for IP Verification Result
+                is_verified = await is_ip_verified(input_token)
+
                 # Bypass detection logic
                 if user_id in user_data and 'inittime' in user_data[user_id]:
                     inittime = user_data[user_id]['inittime']
                     duration = tm() - inittime
                     min_duration = bot_config.get('MINIMUM_DURATION', MINIMUM_DURATION)
+
+                    bypass_detected = False
+
                     if min_duration and (duration < min_duration):
+                        bypass_detected = True
+
+                    if not is_verified:
+                        bypass_detected = True
+
+                    if bypass_detected:
                         await increment_bypass_attempts(user_id)
                         attempts = await get_bypass_attempts(user_id)
 
@@ -147,6 +159,9 @@ async def start_command(client, message):
                                 f"This is your first warning for attempting to bypass the verification process. "
                                 f"Please follow the proper steps. Further attempts will result in a ban."
                             )
+                            if not is_verified:
+                                warning_message += "\n\nReason: <b>IP Mismatch Detected.</b>"
+
                             reply = await safe_api_call(lambda: message.reply_text(warning_message))
                             await auto_delete_message(message, reply)
                             return
@@ -177,6 +192,7 @@ async def start_command(client, message):
                             f"User🕵️‍♂️{user_link} with 🆔 {user_id} @{bot_username} "
                             f"attempted token bypass! ❌ <b>{ban_message}</b> (Attempt: {attempts})\n"
                             f"Time taken: {duration:.2f} seconds (Min required: {min_duration} seconds)\n"
+                            f"IP Verified: {is_verified}\n"
                             f"Token: <code>{input_token}</code>"
                         )
                         await safe_api_call(lambda: bot.send_message(LOG_CHANNEL_ID, log_message, parse_mode=enums.ParseMode.HTML))
@@ -186,6 +202,9 @@ async def start_command(client, message):
                             f"You have been <b>{ban_message}</b> for repeatedly attempting to bypass the verification process. "
                             f"Your token has been invalidated."
                         )
+                        if not is_verified:
+                            warning_message += "\nReason: <b>IP Mismatch Detected.</b>"
+
                         reply = await safe_api_call(lambda: message.reply_text(warning_message))
                         await auto_delete_message(message, reply)
                         return
@@ -994,8 +1013,8 @@ async def update_token(user_id):
         await update_user_data(user_id, new_data)
         user_data[user_id] = {**user_data.get(user_id, {}), **new_data} # Update local cache
 
-        # 1. Create the deep link URL for the bot
-        bot_deep_link = f'https://telegram.dog/{bot_username}?start=token_{token}'
+        # 1. Create the web link URL for the bot
+        bot_deep_link = f"{FLASK_APP_BASE_URL}/final?token={token}"
         
         # 2. Shorten this deep link using the external URL shortener (shorterner.py)
         external_shortened_url = await shorten_url(
@@ -1007,7 +1026,7 @@ async def update_token(user_id):
         # 3. Create the link to your Flask app's gate
         # This will be the URL for the "🎟️ Get Token" button in Telegram
         request_id = str(uuid.uuid4())
-        await save_shortener_link(request_id, external_shortened_url)
+        await save_shortener_link(request_id, external_shortened_url, token)
 
         flask_gate_link = f"{FLASK_APP_BASE_URL}/gate?id={request_id}"
         
@@ -1027,7 +1046,7 @@ async def genrate_token(user_id):
         await update_user_data(user_id, new_data)
         user_data[user_id] = {**user_data.get(user_id, {}), **new_data} # Update local cache
         
-        bot_deep_link = f'https://telegram.dog/{bot_username}?start=token_{token}'
+        bot_deep_link = f"{FLASK_APP_BASE_URL}/final?token={token}"
         external_shortened_url = await shorten_url(
             bot_deep_link,
             base_site=bot_config.get('SHORTERNER_URL'),
@@ -1035,7 +1054,7 @@ async def genrate_token(user_id):
         )
 
         request_id = str(uuid.uuid4())
-        await save_shortener_link(request_id, external_shortened_url)
+        await save_shortener_link(request_id, external_shortened_url, token)
 
         flask_gate_link = f"{FLASK_APP_BASE_URL}/gate?id={request_id}"
         

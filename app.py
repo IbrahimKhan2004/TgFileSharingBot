@@ -1,9 +1,15 @@
 from quart import Quart, request, render_template_string, redirect
 import os
 import urllib.parse
-from database import get_shortener_link_async
+from database import get_shortener_link_async, update_gate_ip, process_ip_check
+from config import BOT_USERNAME
 
 app = Quart(__name__)
+
+def get_client_ip():
+    if request.headers.getlist("X-Forwarded-For"):
+        return request.headers.getlist("X-Forwarded-For")[0]
+    return request.remote_addr
 
 @app.route('/')
 async def hello_world():
@@ -17,6 +23,9 @@ async def human_gate():
     # The actual link lookup will happen in the /verify endpoint.
     if not request_id:
         return "Invalid request. Missing ID.", 400
+
+    client_ip = get_client_ip()
+    await update_gate_ip(request_id, client_ip)
 
     html_content = """
     <!DOCTYPE html>
@@ -128,6 +137,46 @@ async def verify_redirect(request_id):
 
     # Perform the server-side redirect
     return redirect(shortener_redirect_url)
+
+@app.route('/final')
+async def final_check():
+    token = request.args.get('token')
+
+    if not token:
+        return "Invalid request. Missing Token.", 400
+
+    client_ip = get_client_ip()
+    await process_ip_check(token, client_ip)
+
+    # Fallback/Safe logic: Always allow user to proceed to bot,
+    # but the bot will handle the verification result.
+
+    html_content = """
+    <!DOCTYPE html>
+    <html lang="en">
+    <head>
+        <meta charset="UTF-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <title>Verifying...</title>
+        <style>
+            body { font-family: sans-serif; display: flex; flex-direction: column; justify-content: center; align-items: center; height: 100vh; margin: 0; background-color: #f0f2f5; }
+            .container { background-color: #ffffff; padding: 40px; border-radius: 8px; box-shadow: 0 4px 8px rgba(0,0,0,0.1); text-align: center; }
+            h1 { color: #333; margin-bottom: 20px; }
+            p { color: #666; margin-bottom: 30px; }
+            .button { display: inline-block; background-color: #28a745; color: white; padding: 15px 30px; border: none; border-radius: 5px; cursor: pointer; font-size: 1.1em; text-decoration: none; transition: background-color 0.3s ease; }
+            .button:hover { background-color: #218838; }
+        </style>
+    </head>
+    <body>
+        <div class="container">
+            <h1>Verification Complete</h1>
+            <p>Click the button below to open Telegram and complete the process.</p>
+            <a href="https://telegram.dog/{{ bot_username }}?start=token_{{ token }}" class="button">Open Telegram</a>
+        </div>
+    </body>
+    </html>
+    """
+    return await render_template_string(html_content, bot_username=BOT_USERNAME, token=token)
 
 
 if __name__ == "__main__":

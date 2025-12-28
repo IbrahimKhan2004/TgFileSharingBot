@@ -122,6 +122,10 @@ body {
   text-align: center;
   box-shadow: 0 15px 40px rgba(0,0,0,.2);
   position: relative;
+  user-select: none;
+  -webkit-user-select: none;
+  -moz-user-select: none;
+  -ms-user-select: none;
 }
 
 /* Titles */

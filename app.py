@@ -2,9 +2,55 @@ from quart import Quart, request, render_template_string, redirect
 import os
 import urllib.parse
 import base64
+import aiohttp
+import asyncio
+import logging
 from database import get_shortener_link_async
 
+# Configure logging to capture errors and info
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
+
 app = Quart(__name__)
+
+async def resolve_final_url(start_url: str) -> str:
+    """
+    Follows redirects to find the final destination URL server-side.
+
+    This function:
+    1. Accepts the initial shortened URL.
+    2. Uses a fake User-Agent to mimic a real browser (preventing blocking).
+    3. Follows HTTP redirects up to a limit.
+    4. Returns the final effective URL.
+    5. Fails safe: returns the original URL if resolution errors occur.
+    """
+    if not start_url:
+        return start_url
+
+    try:
+        # Mimic a standard Chrome browser on Windows to pass basic bot checks
+        headers = {
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36",
+            "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8",
+            "Accept-Language": "en-US,en;q=0.5"
+        }
+
+        # Use aiohttp to follow redirects asynchronously
+        async with aiohttp.ClientSession(headers=headers) as session:
+            # We use GET because some shorteners block HEAD requests.
+            # allow_redirects=True is default, but explicit is better.
+            # Timeout is critical to prevent hanging the request.
+            timeout = aiohttp.ClientTimeout(total=10)
+            async with session.get(start_url, allow_redirects=True, timeout=timeout) as response:
+                final_url = str(response.url)
+                logger.info(f"Resolved URL: {start_url} -> {final_url}")
+                return final_url
+
+    except Exception as e:
+        logger.error(f"Error resolving URL {start_url}: {e}")
+        # If resolution fails (timeout, connection error), return the original URL
+        # so the user can at least attempt to visit it directly.
+        return start_url
 
 @app.route('/')
 async def hello_world():
@@ -12,261 +58,302 @@ async def hello_world():
 
 @app.route('/gate')
 async def human_gate():
+    """
+    The verification gate page.
+    1. Validates the request ID.
+    2. Fetches the link from the DB.
+    3. Resolves the final destination server-side to skip redirect chains.
+    4. Renders a secure page with a simulated captcha and encoded URL.
+    """
     request_id = request.args.get('id')
 
-    # We just need to check for the ID and pass it to the template.
+    # Basic Validation
     if not request_id:
         return "Invalid request. Missing ID.", 400
 
-    # Fetch the destination URL here to encode it
+    # Fetch the destination URL from Database
     shortener_redirect_url = await get_shortener_link_async(request_id)
     if not shortener_redirect_url:
         return "Invalid ID or link expired.", 404
 
-    # Encode the URL to hide it from source
-    encoded_url = base64.b64encode(shortener_redirect_url.encode('utf-8')).decode('utf-8')
+    # Resolve the redirect chain server-side to get the final URL
+    # This prevents the "Via" browser or IDM from seeing intermediate redirects
+    final_destination = await resolve_final_url(shortener_redirect_url)
 
+    # Encode the final URL in Base64
+    # This ensures the raw URL is not visible in the HTML source until decoded
+    encoded_url = base64.b64encode(final_destination.encode('utf-8')).decode('utf-8')
+
+    # HTML Template (Blue/Green Theme requested by user)
+    # Includes:
+    # - Simulated "Real" Captcha (CSS/JS)
+    # - No Browser Check (Requested to be removed)
+    # - Direct Redirect Logic (Base64 decode -> window.location)
     html_content = """
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8">
-  <title>SecureLink Verification</title>
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta charset="UTF-8">
+<title>SecureLink Verification</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
 
-  <style>
-    body {
-      margin: 0;
-      min-height: 100vh;
-      background: linear-gradient(135deg, #7c3aed, #2563eb);
-      font-family: system-ui, -apple-system, BlinkMacSystemFont, sans-serif;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-    }
+<style>
+body {
+  background: linear-gradient(120deg, #2563eb, #22c55e);
+  height: 100vh;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  margin: 0;
+}
 
-    .container {
-      width: 100%;
-      padding: 16px;
-    }
+.card {
+  background: white;
+  padding: 30px;
+  border-radius: 14px;
+  width: 340px;
+  text-align: center;
+  box-shadow: 0 15px 40px rgba(0,0,0,.2);
+}
 
-    .card {
-      max-width: 360px;
-      margin: auto;
-      background: #ffffff;
-      padding: 28px 24px;
-      border-radius: 16px;
-      box-shadow: 0 15px 40px rgba(0, 0, 0, 0.15);
-      text-align: center;
-      animation: fadeIn 0.6s ease;
-    }
+/* Titles */
+h2 { color: #1f2937; margin-top: 0; }
+p { color: #6b7280; font-size: 0.95rem; margin-bottom: 20px; }
 
-    .warning-container {
-      background-color: #fff3cd;
-      color: #856404;
-      border: 1px solid #ffeeba;
-    }
+/* Loader for initial screen */
+.loader {
+  height: 6px;
+  background: #e5e7eb;
+  border-radius: 999px;
+  overflow: hidden;
+  margin-top: 20px;
+}
+.loader span {
+  display: block;
+  height: 100%;
+  background: #2563eb;
+  animation: load 2s infinite;
+}
+@keyframes load {
+  0%{width:0}
+  100%{width:100%}
+}
 
-    h1, h2 {
-      margin: 0;
-      color: #111827;
-    }
+/* Captcha Container */
+.captcha-container {
+  display: none; /* Hidden initially */
+  margin-top: 20px;
+  text-align: left;
+}
 
-    h1 { font-size: 26px; }
-    h2 { font-size: 22px; }
+/* Realistic Captcha Box */
+.recaptcha-box {
+  background: #f9f9f9;
+  border: 1px solid #d3d3d3;
+  border-radius: 3px;
+  padding: 12px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  box-shadow: 0 1px 1px rgba(0,0,0,0.08);
+  user-select: none;
+  background-color: #fff;
+  width: 100%;
+  box-sizing: border-box;
+}
 
-    p {
-      margin: 8px 0 20px;
-      font-size: 14px;
-      color: #6b7280;
-    }
+.captcha-left {
+  display: flex;
+  align-items: center;
+}
 
-    /* Loader */
-    .loader {
-      height: 6px;
-      background: #e5e7eb;
-      border-radius: 999px;
-      overflow: hidden;
-      margin-top: 20px;
-    }
+.checkbox-window {
+  width: 24px;
+  height: 24px;
+  background: white;
+  border: 2px solid #c1c1c1;
+  border-radius: 2px;
+  cursor: pointer;
+  margin-right: 12px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  position: relative;
+  transition: border 0.2s;
+}
 
-    .loader span {
-      display: block;
-      height: 100%;
-      background: #2563eb;
-      animation: load 2s infinite;
-    }
+.checkbox-window:hover {
+  border: 2px solid #b2b2b2;
+}
 
-    @keyframes load {
-      0% { width: 0 }
-      100% { width: 100% }
-    }
+/* Spinner Animation */
+.spinner {
+  width: 16px;
+  height: 16px;
+  border: 2px solid #d1d5db;
+  border-top-color: #3b82f6;
+  border-radius: 50%;
+  animation: spin 1s linear infinite;
+  display: none;
+}
+@keyframes spin { 100% { transform: rotate(360deg); } }
 
-    /* Captcha box */
-    .captcha-box {
-      margin: 20px 0;
-      padding: 18px;
-      border: 1px solid #e5e7eb;
-      border-radius: 10px;
-      font-size: 14px;
-      color: #374151;
-    }
+/* Checkmark */
+.checkmark {
+  display: none;
+  width: 6px;
+  height: 12px;
+  border: solid #009e55;
+  border-width: 0 3px 3px 0;
+  transform: rotate(45deg);
+  position: absolute;
+  top: 2px;
+}
 
-    button {
-      width: 100%;
-      padding: 14px;
-      border-radius: 999px;
-      background: #2563eb;
-      color: #ffffff;
-      border: none;
-      font-size: 16px;
-      font-weight: 600;
-      cursor: not-allowed;
-      opacity: 0.6;
-      transition: 0.3s;
-    }
+.captcha-label {
+  font-family: Roboto, Arial, sans-serif;
+  font-size: 14px;
+  color: #282828;
+  font-weight: 500;
+}
 
-    button.enabled {
-      cursor: pointer;
-      opacity: 1;
-    }
+.captcha-logo {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  margin-left: 10px;
+}
+.captcha-logo img {
+  width: 32px;
+  opacity: 0.5;
+}
+.captcha-terms {
+  font-size: 8px;
+  color: #9ca3af;
+  text-align: center;
+  margin-top: 2px;
+  line-height: 1.2;
+}
 
-    button.enabled:hover {
-      background: #1d4ed8;
-    }
+/* Main Action Button */
+button#continueBtn {
+  width: 100%;
+  padding: 12px;
+  border-radius: 999px;
+  border: none;
+  background: #2563eb;
+  color: white;
+  font-size: 15px;
+  font-weight: 600;
+  margin-top: 20px;
+  cursor: not-allowed;
+  opacity: 0.6;
+  transition: all 0.3s ease;
+}
 
-    small {
-      display: block;
-      margin-top: 14px;
-      font-size: 12px;
-      color: #6b7280;
-    }
+button#continueBtn.active {
+  cursor: pointer;
+  opacity: 1;
+}
 
-    .hide {
-      display: none;
-    }
+button#continueBtn.active:hover {
+  background: #1d4ed8;
+}
 
-    @keyframes fadeIn {
-      from {
-        opacity: 0;
-        transform: translateY(20px);
-      }
-      to {
-        opacity: 1;
-        transform: translateY(0);
-      }
-    }
-  </style>
+</style>
 </head>
 
 <body>
 
-<div class="container">
-  <div class="card" id="main-card" style="display:none;">
+<div class="card">
 
-    <!-- STEP 1: LOADING -->
-    <div id="loading">
-      <h2>Checking Security</h2>
-      <p>Please wait…</p>
-      <div class="loader"><span></span></div>
-    </div>
+  <!-- STEP 1: LOADING -->
+  <div id="loading">
+    <h2>Checking Security</h2>
+    <p>Please wait…</p>
+    <div class="loader"><span></span></div>
+  </div>
 
-    <!-- STEP 2: VERIFICATION -->
-    <div id="captcha" class="hide">
-      <h1>SecureLink</h1>
-      <p>Security Verification Required</p>
+  <!-- STEP 2: CAPTCHA VERIFICATION -->
+  <div id="verify" class="captcha-container">
+    <h3>SecureLink</h3>
+    <p>Verify to continue</p>
 
-      <div class="captcha-box">
-        ⬜ I'm not a robot
+    <!-- Realistic Captcha Widget -->
+    <div class="recaptcha-box">
+      <div class="captcha-left">
+        <div class="checkbox-window" id="captchaClickTarget" onclick="runCaptcha()">
+           <div class="spinner" id="captchaSpinner"></div>
+           <div class="checkmark" id="captchaCheck"></div>
+        </div>
+        <div class="captcha-label">I'm not a robot</div>
       </div>
 
-      <button id="continueBtn">Continue</button>
-      <small>🔒 Your connection is secure</small>
+      <div class="captcha-logo">
+        <svg viewBox="0 0 48 48" width="24" height="24">
+           <path fill="#4285F4" d="M24,30c3.31,0,6-2.69,6-6s-2.69-6-6-6s-6,2.69-6,6S20.69,30,24,30z"/>
+           <path fill="#4285F4" d="M41.74,13.75C39.05,9.08,34.82,5.43,29.83,3.31C28.01,2.54,26.05,2.08,24,2c-2.07,0.08-4.04,0.54-5.88,1.33 c-4.99,2.14-9.21,5.81-11.89,10.51c-0.29,0.5-0.54,1.02-0.77,1.54l6.19,3.57c0.16-0.34,0.33-0.67,0.52-1c1.69-2.95,4.35-5.26,7.49-6.6 c1.15-0.49,2.38-0.78,3.67-0.84c0.22-0.01,0.44-0.02,0.66-0.02c1.3,0,2.54,0.29,3.68,0.79c3.12,1.36,5.77,3.68,7.44,6.65 c0.18,0.32,0.35,0.65,0.5,0.99L42.5,15.3C42.26,14.77,42.01,14.25,41.74,13.75z"/>
+           <path fill="#4285F4" d="M42.5,15.3l-6.19,3.57c0.75,1.55,1.21,3.27,1.32,5.08c0.01,0.22,0.02,0.44,0.02,0.66c0,0.22-0.01,0.44-0.02,0.66 c-0.12,1.82-0.59,3.54-1.34,5.1l6.2,3.58c1.31-2.71,2.11-5.74,2.23-8.91C44.73,21.57,43.91,18.3,42.5,15.3z"/>
+        </svg>
+        <div class="captcha-terms">reCAPTCHA<br>Privacy - Terms</div>
+      </div>
     </div>
 
+    <button id="continueBtn">Click here to verify</button>
   </div>
 
-  <div id="warning-container" class="card warning-container" style="display:none;">
-      <h2>Browser Check Failed</h2>
-      <p>Please open this link in <b>Google Chrome</b> to proceed.</p>
-      <p>Kripya is link ko Google Chrome me khole.</p>
-  </div>
 </div>
 
 <script>
-    async function checkBrowser() {
-        let isChrome = false;
-        const ua = navigator.userAgent;
-        const vendor = navigator.vendor;
+  let captchaSolved = false;
+  const encodedUrl = "{{ encoded_url }}";
 
-        // 1. Brave Detection (High Priority) - Explicit Block
-        if (navigator.brave && await navigator.brave.isBrave()) {
-            showWarning();
-            return;
-        }
+  // 1. Initial Loading Timer (3 Seconds)
+  setTimeout(() => {
+    document.getElementById("loading").style.display = "none";
+    document.getElementById("verify").style.display = "block";
+  }, 3000);
 
-        // 2. iOS Chrome Check (CriOS) - WebKit based, no Client Hints
-        if (/CriOS/.test(ua)) {
-            isChrome = true;
-        }
-        // 3. Modern Client Hints API (Desktop/Android)
-        else if (navigator.userAgentData && navigator.userAgentData.brands) {
-            const brands = navigator.userAgentData.brands;
-            const hasGoogleChrome = brands.some(b => b.brand === 'Google Chrome');
-            const hasEdge = brands.some(b => b.brand === 'Microsoft Edge');
-            const hasOpera = brands.some(b => b.brand === 'Opera');
-            const hasBrave = brands.some(b => b.brand === 'Brave');
+  // 2. Captcha Logic
+  function runCaptcha() {
+    if (captchaSolved) return; // Already solved
 
-            // Must be Google Chrome and NOT Edge/Opera/Brave
-            if (hasGoogleChrome && !hasEdge && !hasOpera && !hasBrave) {
-                isChrome = true;
-            }
-        }
-        // 4. Legacy Fallback (Regex)
-        else {
-            const isGenericChrome = /Chrome/.test(ua) && /Google Inc/.test(vendor);
-            const isEdge = /Edg/.test(ua);
-            const isOpera = /OPR/.test(ua);
+    const checkbox = document.getElementById('captchaClickTarget');
+    const spinner = document.getElementById('captchaSpinner');
+    const check = document.getElementById('captchaCheck');
+    const btn = document.getElementById('continueBtn');
 
-            if (isGenericChrome && !isEdge && !isOpera) {
-                isChrome = true;
-            }
-        }
+    // Show spinner
+    spinner.style.display = 'block';
 
-        if (isChrome) {
-            showMain();
-        } else {
-            showWarning();
+    // Simulate network delay (1.5 seconds)
+    setTimeout(() => {
+        spinner.style.display = 'none';
+        check.style.display = 'block';
+        checkbox.style.border = '2px solid transparent'; // Remove gray border
+
+        captchaSolved = true;
+
+        // Enable Button
+        btn.classList.add('active');
+        btn.innerText = "Continue";
+    }, 1500);
+  }
+
+  // 3. Redirect Logic (Only when active)
+  document.getElementById("continueBtn").onclick = function() {
+    if (this.classList.contains('active') && captchaSolved) {
+        try {
+            // Decode Base64 and redirect
+            const decoded = atob(encodedUrl);
+            window.location.href = decoded;
+        } catch(e) {
+            console.error("Decoding failed", e);
+            alert("Error: Invalid Link");
         }
     }
-
-    function showMain() {
-        document.getElementById('main-card').style.display = 'block';
-        document.getElementById('warning-container').style.display = 'none';
-
-        // Start the 3-second timer only if browser check passes
-        setTimeout(() => {
-            document.getElementById("loading").style.display = "none";
-            document.getElementById("captcha").classList.remove("hide");
-            document.getElementById("continueBtn").classList.add("enabled");
-
-            // Add click listener
-            document.getElementById("continueBtn").onclick = function() {
-                if(this.classList.contains('enabled')) {
-                   const encoded = "{{ encoded_url }}";
-                   const decoded = atob(encoded);
-                   window.location.href = decoded;
-                }
-            };
-        }, 3000);
-    }
-
-    function showWarning() {
-        document.getElementById('main-card').style.display = 'none';
-        document.getElementById('warning-container').style.display = 'block';
-    }
-
-    checkBrowser();
+  };
 </script>
 
 </body>
@@ -278,7 +365,8 @@ async def human_gate():
 @app.route('/verify/<request_id>')
 async def verify_redirect(request_id):
     """
-    Legacy endpoint.
+    Legacy endpoint support.
+    Some older messages might still point here.
     """
     if not request_id:
         return "Invalid request. Missing ID.", 400
@@ -287,9 +375,8 @@ async def verify_redirect(request_id):
     if not shortener_redirect_url:
         return "Invalid ID or link expired.", 404
 
-    # Perform the server-side redirect
+    # Direct redirect
     return redirect(shortener_redirect_url)
-
 
 if __name__ == "__main__":
     app.run()

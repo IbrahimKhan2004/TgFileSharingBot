@@ -198,22 +198,26 @@ Create a `config.env` file in the root directory or set these environment variab
 *   `/broadcast` (as a reply to a message): Broadcasts the replied message to all users in the database.
 *   `/log`: Sends the `log.txt` file to the owner.
 *   `/restart`: Restarts the bot. Pulls updates from `UPSTREAM_REPO` if configured, then restarts the Python process.
+*   `/remove_duplicate <file_caption>`: Manually removes a file record from the database by its exact caption. This is useful for fixing "phantom duplicate" errors if a file was deleted from the channel but its record remains.
 
-### BotFather Copyable Commands
+### All Commands (for BotFather)
 
 ```
-start - Start the bot
-verify - Manually verify a user (Owner Only)
-settings - Open bot settings (Owner Only)
-unban - Unban a user (Owner Only)
-broadcast - Broadcast a message (Owner Only)
-stats - Show bot statistics (Owner Only)
-log - Get log file (Owner Only)
-delete - Delete messages from update channel (Owner Only)
-index - Index files from DB channel (Owner Only)
-restart - Restart the bot (Owner Only)
-me - Show your profile (User)
-status - Show your profile (User)
+start - Starts the bot
+me - Check your verification status
+status - Alias for /me
+index - Index files from the DB channel
+delete - Delete messages from the update channel
+broadcast - Broadcast a message to all users
+stats - Get bot statistics
+log - Get the bot's log file
+unban - Unban a user
+settings - Access bot settings
+verify - Manually verify a user
+reset_limit - Reset a user's file limit
+expire_token - Expire a user's token
+restart - Restart the bot
+remove_duplicate - Remove a duplicate file record
 ```
 
 ### User Commands (Private Chat with Bot)

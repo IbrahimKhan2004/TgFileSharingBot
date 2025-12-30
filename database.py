@@ -19,16 +19,31 @@ config_collection = async_db['config']
 processed_files = async_db['processed_files']
 
 
-async def add_processed_file(file_unique_id):
-    """Adds a file's unique ID to the processed files collection."""
-    await processed_files.insert_one({
-        '_id': file_unique_id,
-        'processed_at': tm()
-    })
+async def add_processed_file(file_unique_id, caption):
+    """Adds a file's unique ID and caption to the processed files collection."""
+    try:
+        await processed_files.insert_one({
+            '_id': file_unique_id,
+            'caption': caption,
+            'processed_at': tm()
+        })
+    except pymongo.errors.DuplicateKeyError:
+        # This can happen in a race condition, it's safe to ignore
+        pass
 
-async def is_file_processed(file_unique_id):
-    """Checks if a file has already been processed by its unique ID."""
-    return bool(await processed_files.find_one({'_id': file_unique_id}))
+async def is_file_processed(file_unique_id, caption):
+    """Checks if a file is a duplicate by its unique ID or caption."""
+    query = {
+        '$or': [
+            {'_id': file_unique_id},
+            {'caption': caption}
+        ]
+    }
+    return bool(await processed_files.find_one(query))
+
+async def ensure_indexes():
+    """Ensures necessary indexes are created on startup."""
+    await processed_files.create_index([("caption", pymongo.ASCENDING)])
 
 async def save_shortener_link(request_id: str, shortened_url: str):
     """Saves the shortened URL mapping."""

@@ -21,7 +21,8 @@ from database import (
     update_user_data, get_user_data, increment_file_count, load_all_user_data,
     reset_daily_stats_v2, save_shortener_link, get_dynamic_config, update_dynamic_config,
     get_expired_users, increment_verified_today, increment_files_shared_today, get_daily_stats,
-    get_inactive_unverified_users, delete_users_bulk, add_processed_file, is_file_processed, ensure_indexes
+    get_inactive_unverified_users, delete_users_bulk, add_processed_file, is_file_processed, ensure_indexes,
+    remove_processed_file_by_caption
 )
 import urllib.parse
 from datetime import datetime, timedelta, timezone, time
@@ -325,6 +326,32 @@ async def delete_messages_command(client, message):
     except Exception as e:
         logger.error(f"Error in delete command: {e}")
         await message.reply_text(f"An error occurred: {e}")
+
+@bot.on_message(filters.private & filters.command("remove_duplicate") & filters.user(OWNER_ID))
+async def remove_duplicate_command(client, message):
+    """
+    Admin command to manually remove a file record from the processed_files collection.
+    """
+    if len(message.command) < 2:
+        await message.reply_text("<b>Usage:</b> <code>/remove_duplicate <file_caption></code>\nPlease provide the exact caption of the file to remove.", parse_mode=enums.ParseMode.HTML)
+        return
+
+    # Reconstruct the caption from the command arguments
+    caption_to_remove = " ".join(message.command[1:])
+
+    try:
+        deleted_count = await remove_processed_file_by_caption(caption_to_remove)
+        if deleted_count > 0:
+            response = f"✅ Successfully removed the record for: <code>{caption_to_remove}</code>."
+            logger.info(f"Admin manually removed duplicate record for caption: {caption_to_remove}")
+        else:
+            response = f"⚠️ No record found with the caption: <code>{caption_to_remove}</code>."
+
+        await message.reply_text(response, parse_mode=enums.ParseMode.HTML)
+
+    except Exception as e:
+        logger.error(f"Error in /remove_duplicate command for caption '{caption_to_remove}': {e}")
+        await message.reply_text(f"An error occurred while trying to remove the record: {e}")
 
 @bot.on_message(filters.private & filters.command('broadcast') & filters.user(OWNER_ID))
 async def send_text(client, message):

@@ -49,6 +49,11 @@ async def is_file_processed(file_unique_id, caption, content_hash=None):
 
     return bool(await processed_files.find_one(query))
 
+async def remove_processed_file_by_caption(caption: str):
+    """Removes a file's record from the processed files collection based on its caption."""
+    result = await processed_files.delete_one({'caption': caption})
+    return result.deleted_count
+
 async def ensure_indexes():
     """Ensures necessary indexes are created on startup."""
     await processed_files.create_index([("caption", pymongo.ASCENDING)])

@@ -19,31 +19,42 @@ config_collection = async_db['config']
 processed_files = async_db['processed_files']
 
 
-async def add_processed_file(file_unique_id, caption):
-    """Adds a file's unique ID and caption to the processed files collection."""
+async def add_processed_file(file_unique_id, caption, content_hash=None):
+    """Adds a file's unique ID, caption, and content hash to the processed files collection."""
     try:
-        await processed_files.insert_one({
+        document = {
             '_id': file_unique_id,
             'caption': caption,
             'processed_at': tm()
-        })
+        }
+        if content_hash:
+            document['content_hash'] = content_hash
+
+        await processed_files.insert_one(document)
     except pymongo.errors.DuplicateKeyError:
         # This can happen in a race condition, it's safe to ignore
         pass
 
-async def is_file_processed(file_unique_id, caption):
-    """Checks if a file is a duplicate by its unique ID or caption."""
-    query = {
-        '$or': [
-            {'_id': file_unique_id},
-            {'caption': caption}
-        ]
-    }
+async def is_file_processed(file_unique_id, caption, content_hash=None):
+    """Checks if a file is a duplicate by its unique ID, caption, or content hash."""
+    or_conditions = [
+        {'_id': file_unique_id},
+        {'caption': caption}
+    ]
+
+    if content_hash:
+        or_conditions.append({'content_hash': content_hash})
+
+    query = {'$or': or_conditions}
+
     return bool(await processed_files.find_one(query))
 
 async def ensure_indexes():
     """Ensures necessary indexes are created on startup."""
     await processed_files.create_index([("caption", pymongo.ASCENDING)])
+    # A sparse index only contains entries for documents that have the indexed field.
+    # This is ideal because we only compute hashes for certain file types (video/document).
+    await processed_files.create_index([("content_hash", pymongo.ASCENDING)], sparse=True)
 
 async def save_shortener_link(request_id: str, shortened_url: str):
     """Saves the shortened URL mapping."""

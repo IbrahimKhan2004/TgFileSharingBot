@@ -2,6 +2,7 @@ import uvloop
 import asyncio
 import uuid
 import sys
+import hashlib
 from time import time as tm
 from asyncio import create_subprocess_exec, gather
 from pyrogram.types import User
@@ -796,15 +797,30 @@ async def process_message(client, message):
             logger.error(f"File with missing file_unique_id received: {caption}")
             return
 
-        if await is_file_processed(file_unique_id, caption):
-            logger.warning(f"Duplicate file detected and removed: {caption}")
+        content_hash = None
+        # Only compute hash for videos and documents, which are likely to be the large duplicate files.
+        if message.video or message.document:
+            try:
+                # Download the first chunk of the file. Pyrogram's chunk size is up to 1MB,
+                # so we limit it to 1 chunk. We will hash this chunk.
+                async for chunk in bot.stream_media(message, limit=1):
+                    if chunk:
+                        content_hash = hashlib.sha256(chunk).hexdigest()
+                    break  # Ensure we only process the first chunk
+            except Exception as e:
+                logger.error(f"Could not compute hash for {caption}: {e}")
+                # If hashing fails, we cannot reliably check for content duplicates, so we skip processing.
+                return
+
+        if await is_file_processed(file_unique_id, caption, content_hash):
+            logger.warning(f"Duplicate file detected and removed: {caption} (hash: {content_hash})")
             await bot.send_message(LOG_CHANNEL_ID, f"Removed duplicate file: {caption}")
             await message.delete()
             return
 
-        await add_processed_file(file_unique_id, caption)
+        await add_processed_file(file_unique_id, caption, content_hash)
 
-        file_name = await remove_extension(caption)   
+        file_name = await remove_extension(caption)
         file_size = humanbytes(media.file_size)
         if message.video:
             duration = TimeFormatter(media.duration * 1000)

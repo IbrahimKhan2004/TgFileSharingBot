@@ -20,7 +20,7 @@ from database import (
     update_user_data, get_user_data, increment_file_count, load_all_user_data,
     reset_daily_stats_v2, save_shortener_link, get_dynamic_config, update_dynamic_config,
     get_expired_users, increment_verified_today, increment_files_shared_today, get_daily_stats,
-    get_inactive_unverified_users, delete_users_bulk
+    get_inactive_unverified_users, delete_users_bulk, add_processed_file, is_file_processed
 )
 import urllib.parse
 from datetime import datetime, timedelta, timezone, time
@@ -788,6 +788,20 @@ async def process_message(client, message):
     thumbnail = None
 
     if media:
+        file_unique_id = media.file_unique_id
+        if not file_unique_id:
+            logger.error(f"File with missing file_unique_id received: {media.file_name or 'Unknown Filename'}")
+            return
+
+        if await is_file_processed(file_unique_id):
+            caption = message.caption if message.caption else media.file_name
+            logger.warning(f"Duplicate file detected and removed: {caption}")
+            await bot.send_message(LOG_CHANNEL_ID, f"Removed duplicate file: {caption}")
+            await message.delete()
+            return
+
+        await add_processed_file(file_unique_id)
+
         caption = message.caption if message.caption else media.file_name
         file_name = await remove_extension(caption)   
         file_size = humanbytes(media.file_size)

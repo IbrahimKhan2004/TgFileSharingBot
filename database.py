@@ -16,6 +16,19 @@ banned_users = async_db['banned_users']
 daily_stats = async_db['daily_stats']
 shortener_requests = async_db['shortener_requests']
 config_collection = async_db['config']
+processed_files = async_db['processed_files']
+
+
+async def add_processed_file(file_unique_id):
+    """Adds a file's unique ID to the processed files collection."""
+    await processed_files.insert_one({
+        '_id': file_unique_id,
+        'processed_at': tm()
+    })
+
+async def is_file_processed(file_unique_id):
+    """Checks if a file has already been processed by its unique ID."""
+    return bool(await processed_files.find_one({'_id': file_unique_id}))
 
 async def save_shortener_link(request_id: str, shortened_url: str):
     """Saves the shortened URL mapping."""

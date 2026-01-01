@@ -343,13 +343,24 @@ async def remove_duplicate_command(client, message):
         # Only compute hash for videos and documents (same logic as process_message)
         if media_msg.video or media_msg.document:
             status_msg = await message.reply_text("Computing hash for removal...")
-            try:
-                async for chunk in client.stream_media(media_msg, limit=1):
-                    if chunk:
-                        content_hash = hashlib.sha256(chunk).hexdigest()
+            hash_retries = 3
+            for attempt in range(hash_retries):
+                try:
+                    async for chunk in client.stream_media(media_msg, limit=1):
+                        if chunk:
+                            content_hash = hashlib.sha256(chunk).hexdigest()
+                        break
+                    break # Success
+                except FloodWait as e:
+                    if attempt < hash_retries - 1:
+                        wait_time = e.value + 5
+                        logger.warning(f"FloodWait removal hash. Sleeping {wait_time}s. Attempt {attempt + 1}/{hash_retries}")
+                        await asyncio.sleep(wait_time)
+                    else:
+                        logger.error(f"Could not compute hash for removal after retries: {e}")
+                except Exception as e:
+                    logger.error(f"Could not compute hash for removal: {e}")
                     break
-            except Exception as e:
-                logger.error(f"Could not compute hash for removal: {e}")
             await status_msg.delete()
 
         try:
@@ -848,6 +859,7 @@ async def process_queue():
         if message is None:  
             break
         await process_message(bot, message) 
+        await asyncio.sleep(5) # Throttle processing to prevent floods
         message_queue.task_done()
 
 async def process_message(client, message):
@@ -867,17 +879,28 @@ async def process_message(client, message):
         content_hash = None
         # Only compute hash for videos and documents, which are likely to be the large duplicate files.
         if message.video or message.document:
-            try:
-                # Download the first chunk of the file. Pyrogram's chunk size is up to 1MB,
-                # so we limit it to 1 chunk. We will hash this chunk.
-                async for chunk in bot.stream_media(message, limit=1):
-                    if chunk:
-                        content_hash = hashlib.sha256(chunk).hexdigest()
-                    break  # Ensure we only process the first chunk
-            except Exception as e:
-                logger.error(f"Could not compute hash for {caption}: {e}")
-                # If hashing fails, we cannot reliably check for content duplicates, so we skip processing.
-                return
+            hash_retries = 3
+            for attempt in range(hash_retries):
+                try:
+                    # Download the first chunk of the file. Pyrogram's chunk size is up to 1MB,
+                    # so we limit it to 1 chunk. We will hash this chunk.
+                    async for chunk in bot.stream_media(message, limit=1):
+                        if chunk:
+                            content_hash = hashlib.sha256(chunk).hexdigest()
+                        break  # Ensure we only process the first chunk
+                    break # Success, exit loop
+                except FloodWait as e:
+                    if attempt < hash_retries - 1:
+                        wait_time = e.value + 5
+                        logger.warning(f"FloodWait during hash computation for {caption}. Sleeping for {wait_time}s. Attempt {attempt + 1}/{hash_retries}")
+                        await asyncio.sleep(wait_time)
+                    else:
+                        logger.error(f"Could not compute hash for {caption} after {hash_retries} attempts: {e}")
+                        return
+                except Exception as e:
+                    logger.error(f"Could not compute hash for {caption}: {e}")
+                    # If hashing fails, we cannot reliably check for content duplicates, so we skip processing.
+                    return
 
         if await is_file_processed(file_unique_id, caption, content_hash):
             logger.warning(f"Duplicate file detected and removed: {caption} (hash: {content_hash})")

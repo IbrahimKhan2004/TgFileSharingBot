@@ -22,7 +22,7 @@ from database import (
     reset_daily_stats_v2, save_shortener_link, get_dynamic_config, update_dynamic_config,
     get_expired_users, increment_verified_today, increment_files_shared_today, get_daily_stats,
     get_inactive_unverified_users, delete_users_bulk, add_processed_file, is_file_processed, ensure_indexes,
-    remove_processed_file_by_caption
+    remove_processed_file_by_caption, remove_processed_file_by_id_or_hash, remove_any_duplicate
 )
 import urllib.parse
 from datetime import datetime, timedelta, timezone, time
@@ -331,26 +331,66 @@ async def delete_messages_command(client, message):
 async def remove_duplicate_command(client, message):
     """
     Admin command to manually remove a file record from the processed_files collection.
+    Can be used by replying to a file or by providing the caption.
     """
-    if len(message.command) < 2:
-        await message.reply_text("<b>Usage:</b> <code>/remove_duplicate <file_caption></code>\nPlease provide the exact caption of the file to remove.", parse_mode=enums.ParseMode.HTML)
+    # 1. Check if it's a reply to a media message
+    if message.reply_to_message and (message.reply_to_message.document or message.reply_to_message.video or message.reply_to_message.audio):
+        media_msg = message.reply_to_message
+        media = media_msg.document or media_msg.video or media_msg.audio
+        file_unique_id = media.file_unique_id
+        content_hash = None
+
+        # Only compute hash for videos and documents (same logic as process_message)
+        if media_msg.video or media_msg.document:
+            status_msg = await message.reply_text("Computing hash for removal...")
+            try:
+                async for chunk in client.stream_media(media_msg, limit=1):
+                    if chunk:
+                        content_hash = hashlib.sha256(chunk).hexdigest()
+                    break
+            except Exception as e:
+                logger.error(f"Could not compute hash for removal: {e}")
+            await status_msg.delete()
+
+        try:
+            deleted_count = await remove_processed_file_by_id_or_hash(file_unique_id, content_hash)
+            if deleted_count > 0:
+                await message.reply_text(f"✅ Successfully removed {deleted_count} record(s) matching this file (ID/Hash).")
+            else:
+                await message.reply_text("⚠️ No records found matching this file's unique ID or hash.")
+        except Exception as e:
+            logger.error(f"Error removing by file: {e}")
+            await message.reply_text(f"An error occurred: {e}")
         return
 
-    # Reconstruct the caption from the command arguments
-    caption_to_remove = " ".join(message.command[1:])
+    # 2. Check if argument is provided (ID, Hash, or Caption)
+    if len(message.command) < 2:
+        await message.reply_text(
+            "<b>Usage:</b>\n"
+            "1. Reply to a file with <code>/remove_duplicate</code>\n"
+            "2. <code>/remove_duplicate <file_unique_id | content_hash | caption></code>\n\n"
+            "Please provide the unique ID, hash, or exact caption of the file to remove.",
+            parse_mode=enums.ParseMode.HTML
+        )
+        return
+
+    # Reconstruct the argument (could be ID, Hash, or Caption with spaces)
+    arg_to_remove = " ".join(message.command[1:])
 
     try:
-        deleted_count = await remove_processed_file_by_caption(caption_to_remove)
+        # Try to remove by ID, Hash, or Caption using the unified function
+        deleted_count = await remove_any_duplicate(arg_to_remove)
+
         if deleted_count > 0:
-            response = f"✅ Successfully removed the record for: <code>{caption_to_remove}</code>."
-            logger.info(f"Admin manually removed duplicate record for caption: {caption_to_remove}")
+            response = f"✅ Successfully removed {deleted_count} record(s) matching: <code>{arg_to_remove}</code>."
+            logger.info(f"Admin manually removed duplicate record for arg: {arg_to_remove}")
         else:
-            response = f"⚠️ No record found with the caption: <code>{caption_to_remove}</code>."
+            response = f"⚠️ No record found matching: <code>{arg_to_remove}</code>."
 
         await message.reply_text(response, parse_mode=enums.ParseMode.HTML)
 
     except Exception as e:
-        logger.error(f"Error in /remove_duplicate command for caption '{caption_to_remove}': {e}")
+        logger.error(f"Error in /remove_duplicate command for arg '{arg_to_remove}': {e}")
         await message.reply_text(f"An error occurred while trying to remove the record: {e}")
 
 @bot.on_message(filters.private & filters.command('broadcast') & filters.user(OWNER_ID))
@@ -841,7 +881,15 @@ async def process_message(client, message):
 
         if await is_file_processed(file_unique_id, caption, content_hash):
             logger.warning(f"Duplicate file detected and removed: {caption} (hash: {content_hash})")
-            await bot.send_message(LOG_CHANNEL_ID, f"Removed duplicate file: {caption}")
+
+            log_msg = (
+                f"<b>⚠️ Duplicate File Removed</b>\n\n"
+                f"<b>Caption:</b> {caption}\n"
+                f"<b>File ID:</b> <code>{file_unique_id}</code>\n"
+                f"<b>Hash:</b> <code>{content_hash}</code>"
+            )
+            await bot.send_message(LOG_CHANNEL_ID, log_msg)
+
             await message.delete()
             return
 

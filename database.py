@@ -54,6 +54,28 @@ async def remove_processed_file_by_caption(caption: str):
     result = await processed_files.delete_one({'caption': caption})
     return result.deleted_count
 
+async def remove_processed_file_by_id_or_hash(file_unique_id: str, content_hash: str = None):
+    """Removes a file's record based on file_unique_id or content_hash."""
+    or_conditions = [{'_id': file_unique_id}]
+    if content_hash:
+        or_conditions.append({'content_hash': content_hash})
+
+    query = {'$or': or_conditions}
+    result = await processed_files.delete_many(query)
+    return result.deleted_count
+
+async def remove_any_duplicate(arg: str):
+    """Removes a record matching the argument by _id (file_unique_id), content_hash, or caption."""
+    query = {
+        '$or': [
+            {'_id': arg},
+            {'content_hash': arg},
+            {'caption': arg}
+        ]
+    }
+    result = await processed_files.delete_many(query)
+    return result.deleted_count
+
 async def ensure_indexes():
     """Ensures necessary indexes are created on startup."""
     await processed_files.create_index([("caption", pymongo.ASCENDING)])

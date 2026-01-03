@@ -75,3 +75,8 @@ MINIMUM_DURATION = int(os.getenv('MINIMUM_DURATION', '0')) # Added: Minimum dura
 # New Configs
 FORCE_SUB_CHANNEL = os.getenv('FORCE_SUB_CHANNEL', None) # Force subscribe channel ID or Link
 AUTO_DELETE_TIME = int(os.getenv('AUTO_DELETE_TIME', '60')) # Auto delete time in seconds
+
+# Cloudflare
+CLOUDFLARE_WORKER_URL = os.getenv('CLOUDFLARE_WORKER_URL', None)
+ENCRYPTION_KEY = os.getenv('ENCRYPTION_KEY', None)
+WORKER_SECRET = os.getenv('WORKER_SECRET', None)

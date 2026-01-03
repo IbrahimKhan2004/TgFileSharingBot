@@ -68,9 +68,8 @@ Now, we need to configure your main bot to use the worker.
         *   Copy this URL and paste it as the value.
 
     *   `ENCRYPTION_KEY`:
-        *   This is used to create the secure links. You need a **strong, 32-character-long** random string.
-        *   You can use any password generator to create this, or simply type a random string of 32 characters. The bot will handle the rest.
-        *   **Example:** `MySuperSecretKeyForMyBotProject32`
+        *   This is used to create the secure links. You need a 32-character-long random string.
+        *   **Important:** Use a secure password generator like [1Password's Generator](https://1password.com/password-generator/) to create a strong key.
         *   Paste this key as the value.
 
     *   `WORKER_SECRET`:

@@ -5,7 +5,6 @@ import base64
 import aiohttp
 import asyncio
 import logging
-import hashlib
 from cryptography.fernet import Fernet
 from pyrogram import Client, enums
 from pyrogram.raw.functions.upload import GetFile
@@ -485,12 +484,7 @@ async def get_file_info():
 
     # 3. Decrypt the data
     try:
-        # Ensure the key is in the correct format for Fernet
-        # We hash the user-provided key to get a fixed-size 32-byte key,
-        # and then base64-encode it, which is what Fernet requires.
-        key = base64.urlsafe_b64encode(hashlib.sha256(ENCRYPTION_KEY.encode()).digest())
-        f = Fernet(key)
-
+        f = Fernet(ENCRYPTION_KEY.encode())
         decrypted_payload = f.decrypt(base64.urlsafe_b64decode(encrypted_data)).decode()
         chat_id, message_id = map(int, decrypted_payload.split(':'))
     except Exception as e:

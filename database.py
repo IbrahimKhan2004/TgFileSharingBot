@@ -37,15 +37,15 @@ async def add_processed_file(file_unique_id, caption, content_hash=None):
 
 async def is_file_processed(file_unique_id, caption, content_hash=None):
     """Checks if a file is a duplicate by its unique ID, caption, or content hash."""
-    or_conditions = [
+    query_conditions = [
         {'_id': file_unique_id},
         {'caption': caption}
     ]
 
-    if content_hash:
-        or_conditions.append({'content_hash': content_hash})
+    if content_hash is not None:
+        query_conditions.append({'content_hash': content_hash})
 
-    query = {'$or': or_conditions}
+    query = {'$or': query_conditions}
 
     return bool(await processed_files.find_one(query))
 

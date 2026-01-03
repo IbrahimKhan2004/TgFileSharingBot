@@ -877,42 +877,37 @@ async def process_message(client, message):
             return
 
         content_hash = None
-        # Only compute hash for videos and documents, which are likely to be the large duplicate files.
         if message.video or message.document:
-            hash_retries = 3
-            for attempt in range(hash_retries):
+            max_retries = 3
+            for attempt in range(max_retries):
                 try:
-                    # Download the first chunk of the file. Pyrogram's chunk size is up to 1MB,
-                    # so we limit it to 1 chunk. We will hash this chunk.
                     async for chunk in bot.stream_media(message, limit=1):
                         if chunk:
                             content_hash = hashlib.sha256(chunk).hexdigest()
-                        break  # Ensure we only process the first chunk
-                    break # Success, exit loop
+                        break
+                    break
                 except FloodWait as e:
-                    if attempt < hash_retries - 1:
+                    if attempt < max_retries - 1:
                         wait_time = e.value + 5
-                        logger.warning(f"FloodWait during hash computation for {caption}. Sleeping for {wait_time}s. Attempt {attempt + 1}/{hash_retries}")
+                        logger.warning(f"FloodWait during hash computation for {caption}. Sleeping for {wait_time}s. Attempt {attempt + 1}/{max_retries}")
                         await asyncio.sleep(wait_time)
                     else:
-                        logger.error(f"Could not compute hash for {caption} after {hash_retries} attempts: {e}")
-                        return
+                        logger.error(f"Could not compute hash for {caption} after {max_retries} attempts: {e}")
+                        await bot.send_message(OWNER_ID, f"<b>Warning:</b> Could not compute hash for file <code>{caption}</code> after {max_retries} attempts. Proceeding without hash-based duplicate check.")
                 except Exception as e:
                     logger.error(f"Could not compute hash for {caption}: {e}")
-                    # If hashing fails, we cannot reliably check for content duplicates, so we skip processing.
-                    return
+                    await bot.send_message(OWNER_ID, f"<b>Warning:</b> An error occurred during hash computation for <code>{caption}</code>. Proceeding without hash-based duplicate check.\n\n<b>Error:</b> {e}")
+                    break
 
         if await is_file_processed(file_unique_id, caption, content_hash):
-            logger.warning(f"Duplicate file detected and removed: {caption} (hash: {content_hash})")
-
+            logger.warning(f"Duplicate file detected and removed: {caption} (hash: {content_hash or 'N/A'})")
             log_msg = (
                 f"<b>⚠️ Duplicate File Removed</b>\n\n"
                 f"<b>Caption:</b> {caption}\n"
                 f"<b>File ID:</b> <code>{file_unique_id}</code>\n"
-                f"<b>Hash:</b> <code>{content_hash}</code>"
+                f"<b>Hash:</b> <code>{content_hash or 'N/A'}</code>"
             )
             await bot.send_message(LOG_CHANNEL_ID, log_msg)
-
             await message.delete()
             return
 

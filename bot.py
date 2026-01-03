@@ -74,8 +74,7 @@ async def load_initial_data():
         'DAILY_LIMIT': int(db_config.get('DAILY_LIMIT', DAILY_LIMIT)),
         'TOKEN_TIMEOUT': int(db_config.get('TOKEN_TIMEOUT', TOKEN_TIMEOUT)),
         'FORCE_SUB_CHANNEL': clean_force_sub_url(db_config.get('FORCE_SUB_CHANNEL', FORCE_SUB_CHANNEL)),
-        'AUTO_DELETE_TIME': int(db_config.get('AUTO_DELETE_TIME', AUTO_DELETE_TIME)),
-        'CLOUDFLARE_WORKER_URL': db_config.get('CLOUDFLARE_WORKER_URL', CLOUDFLARE_WORKER_URL)
+        'AUTO_DELETE_TIME': int(db_config.get('AUTO_DELETE_TIME', AUTO_DELETE_TIME))
     }
 
     logger.info("Successfully loaded all user data and dynamic config from the database.")

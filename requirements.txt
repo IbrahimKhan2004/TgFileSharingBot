@@ -11,4 +11,3 @@ motor
 mutagen
 tzdata
 uvicorn
-cryptography

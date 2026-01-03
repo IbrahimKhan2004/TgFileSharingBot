@@ -10,6 +10,8 @@ from pyrogram import Client, enums, filters
 from pyrogram.types import InlineKeyboardMarkup, InlineKeyboardButton
 from pyrogram.errors import FloodWait, UserIsBlocked, InputUserDeactivated, WebpageCurlFailed, WebpageMediaEmpty, MessageNotModified, UserNotParticipant
 from asyncio import Queue
+from cryptography.fernet import Fernet
+import base64
 from config import *
 from utils import *
 from tmdb import get_by_name
@@ -210,9 +212,20 @@ async def start_command(client, message):
                 caption = await remove_extension(file_message.caption.html or "")
                 auto_delete_time = bot_config.get('AUTO_DELETE_TIME', 60)
                 warning = f"\n\n<b>⚠️ This file will be deleted in {auto_delete_time} seconds!</b>"
-                copy_message = await safe_api_call(lambda: file_message.copy(chat_id=message.chat.id, caption=f"<b>{caption}</b>{warning}", parse_mode=enums.ParseMode.HTML))
+
+                # Create the button for generating a direct link
+                button = InlineKeyboardMarkup([
+                    [InlineKeyboardButton("🚀 Generate Direct Link", callback_data=f"genlink_{file_message.chat.id}_{file_message.id}")]
+                ])
+
+                copy_message = await safe_api_call(lambda: file_message.copy(
+                    chat_id=message.chat.id,
+                    caption=f"<b>{caption}</b>{warning}",
+                    parse_mode=enums.ParseMode.HTML,
+                    reply_markup=button
+                ))
                 await increment_file_count(user_id)
-                await increment_files_shared_today() # New line to track daily file shares
+                await increment_files_shared_today()
                 user_data[user_id]['file_count'] += 1
 
                 # File Limit Warning Logic
@@ -710,6 +723,47 @@ async def restart_callback(client, callback_query):
 @bot.on_callback_query(filters.regex("^close_settings"))
 async def close_settings_callback(client, callback_query):
     await callback_query.message.delete()
+
+
+@bot.on_callback_query(filters.regex("^genlink_"))
+async def generate_link_callback(client, callback_query):
+    """
+    Handles the 'Generate Direct Link' button click.
+    Creates a secure, encrypted link for the Cloudflare Worker.
+    """
+    try:
+        # Extract chat_id and message_id from the callback data
+        _, chat_id_str, message_id_str = callback_query.data.split("_")
+        chat_id = int(chat_id_str)
+        message_id = int(message_id_str)
+
+        # 1. Create the payload to encrypt
+        payload = f"{chat_id}:{message_id}"
+
+        # 2. Encrypt the payload
+        f = Fernet(ENCRYPTION_KEY.encode())
+        encrypted_payload = base64.urlsafe_b64encode(f.encrypt(payload.encode())).decode()
+
+        # 3. Construct the full Cloudflare Worker URL
+        worker_url = bot_config.get('CLOUDFLARE_WORKER_URL')
+        if not worker_url:
+            await callback_query.answer("Error: Cloudflare Worker URL is not configured.", show_alert=True)
+            return
+
+        direct_link = f"{worker_url}/download/{encrypted_payload}"
+
+        # 4. Send the link to the user
+        await callback_query.message.reply_text(
+            "✅ Your direct download link is ready:\n\n"
+            f"<code>{direct_link}</code>\n\n"
+            "<i>Note: This link is for your use only and may expire.</i>",
+            quote=True
+        )
+        await callback_query.answer("Link generated successfully!")
+
+    except Exception as e:
+        logger.error(f"Error generating link: {e}")
+        await callback_query.answer(f"An error occurred: {e}", show_alert=True)
 
 
 @bot.on_message(filters.private & filters.command("verify") & filters.user(OWNER_ID))

@@ -739,11 +739,20 @@ async def generate_link_callback(client, callback_query):
         chat_id = int(chat_id_str)
         message_id = int(message_id_str)
 
-        # 1. Create the payload to encrypt
-        payload = f"{chat_id}:{message_id}"
+        # 1. Get the media object to access file_id and file_name
+        message = callback_query.message.reply_to_message or callback_query.message
+        media = message.video or message.document or message.audio
+        if not media:
+            await callback_query.answer("Error: Media not found in the message.", show_alert=True)
+            return
 
-        # 2. Encrypt the payload
-        # Ensure the key is in the correct format for Fernet
+        file_id = media.file_id
+        file_name = media.file_name or "download"
+
+        # 2. Create the payload to encrypt
+        payload = f"{file_id}:{file_name}"
+
+        # 3. Encrypt the payload
         key = base64.urlsafe_b64encode(hashlib.sha256(ENCRYPTION_KEY.encode()).digest())
         f = Fernet(key)
         encrypted_payload = base64.urlsafe_b64encode(f.encrypt(payload.encode())).decode()

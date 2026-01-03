@@ -1,25 +1,11 @@
-from quart import Quart, request, render_template_string, redirect, jsonify
+from quart import Quart, request, render_template_string, redirect
 import os
 import urllib.parse
 import base64
 import aiohttp
 import asyncio
 import logging
-from cryptography.fernet import Fernet
-from pyrogram import Client, enums
-from pyrogram.raw.functions.upload import GetFile
-from pyrogram.raw.types import InputFileLocation
-from config import BOT_TOKEN, API_ID, API_HASH, ENCRYPTION_KEY, WORKER_SECRET
 from database import get_shortener_link_async
-
-# Initialize the Pyrogram client
-bot = Client(
-    "bot",
-    api_id=API_ID,
-    api_hash=API_HASH,
-    bot_token=BOT_TOKEN,
-    in_memory=True
-)
 
 # Configure logging to capture errors and info
 logging.basicConfig(level=logging.INFO)
@@ -455,86 +441,5 @@ async def verify_redirect(request_id):
     # Direct redirect
     return redirect(shortener_redirect_url)
 
-# Lifespan events to start and stop the Pyrogram client
-@app.before_serving
-async def startup():
-    await bot.start()
-
-@app.after_serving
-async def shutdown():
-    await bot.stop()
-
-@app.route('/api/get_file_info', methods=['POST'])
-async def get_file_info():
-    """
-    This secure endpoint is called by the Cloudflare Worker.
-    It decrypts the file data, gets a temporary download link from Telegram,
-    and returns it to the worker.
-    """
-    # 1. Security Check: Ensure the request is from our worker
-    worker_secret = request.headers.get('X-Worker-Secret')
-    if worker_secret != WORKER_SECRET:
-        return jsonify({'error': 'Unauthorized'}), 401
-
-    # 2. Get and validate encrypted data
-    data = await request.get_json()
-    encrypted_data = data.get('encrypted_data')
-    if not encrypted_data:
-        return jsonify({'error': 'Missing encrypted_data'}), 400
-
-    # 3. Decrypt the data
-    try:
-        f = Fernet(ENCRYPTION_KEY.encode())
-        decrypted_payload = f.decrypt(base64.urlsafe_b64decode(encrypted_data)).decode()
-        chat_id, message_id = map(int, decrypted_payload.split(':'))
-    except Exception as e:
-        logger.error(f"Decryption failed: {e}")
-        return jsonify({'error': 'Invalid or expired token'}), 400
-
-    # 4. Fetch the message and get the download link
-    try:
-        # Get the full message object from Telegram
-        message = await bot.get_messages(chat_id, message_id)
-
-        media = message.video or message.document or message.audio
-        if not media:
-            return jsonify({'error': 'No media found in message'}), 404
-
-        # 1. Construct the InputFileLocation object required by raw TG API
-        input_location = InputFileLocation(
-            file_id=media.file_id,
-            access_hash=media.access_hash,
-            file_reference=media.file_ref,
-            thumb_size=""  # Not needed for full file download
-        )
-
-        # 2. Use a raw MTProto call to get the file's CDN location.
-        # This does NOT download the file content to the server. It only gets metadata.
-        # We ask for 0 bytes to make sure we only get the location info.
-        file_location_info = await bot.invoke(
-            GetFile(location=input_location, offset=0, limit=0)
-        )
-
-        # 3. Get the correct DC ID (data center) for the file
-        # The DC ID is crucial for building the correct URL.
-        dc_id = file_location_info.dc_id
-
-        # 4. Construct the final, streamable URL.
-        # This URL format is how Telegram's CDN works. It allows for range requests.
-        # IMPORTANT: This is a simplified approach. In a production scenario, one might need
-        # to get the DC's IP address from the client's config. For now, this is robust.
-        file_url = f"https://{dc_id}.cont.web.telegram.org/file/{media.file_id}"
-
-        file_name = media.file_name if media.file_name else "download"
-
-        return jsonify({
-            'file_url': file_url,
-            'file_name': file_name
-        })
-
-    except Exception as e:
-        logger.error(f"Failed to fetch message or generate download link: {e}")
-        return jsonify({'error': 'Failed to retrieve file from Telegram'}), 500
-
 if __name__ == "__main__":
-    app.run(host="0.0.0.0", port=int(os.environ.get("PORT", 8080)))
+    app.run()

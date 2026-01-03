@@ -12,7 +12,6 @@ from pyrogram.errors import FloodWait, UserIsBlocked, InputUserDeactivated, Webp
 from asyncio import Queue
 from cryptography.fernet import Fernet
 import base64
-import hashlib
 from config import *
 from utils import *
 from tmdb import get_by_name
@@ -743,9 +742,7 @@ async def generate_link_callback(client, callback_query):
         payload = f"{chat_id}:{message_id}"
 
         # 2. Encrypt the payload
-        # Ensure the key is in the correct format for Fernet
-        key = base64.urlsafe_b64encode(hashlib.sha256(ENCRYPTION_KEY.encode()).digest())
-        f = Fernet(key)
+        f = Fernet(ENCRYPTION_KEY.encode())
         encrypted_payload = base64.urlsafe_b64encode(f.encrypt(payload.encode())).decode()
 
         # 3. Construct the full Cloudflare Worker URL

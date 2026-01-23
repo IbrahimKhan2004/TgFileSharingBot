@@ -2,6 +2,9 @@ import psutil
 import platform
 import time
 import subprocess
+import pyrogram
+import motor
+import pymongo
 from utils import humanbytes, get_readable_time
 
 def get_progress_bar(percentage, segments=12):
@@ -66,21 +69,9 @@ def get_system_stats(bot_uptime):
 
     # Package Stats
     python_version = platform.python_version()
-
-    aria2_version = "Not Installed"
-    try:
-        aria2_version = subprocess.check_output("aria2c --version", shell=True).decode().split('\n')[0].split(' ')[2]
-    except Exception: pass
-
-    ffmpeg_version = "Not Installed"
-    try:
-        ffmpeg_version = subprocess.check_output("ffmpeg -version", shell=True).decode().split('\n')[0].split(' ')[2]
-    except Exception: pass
-
-    rclone_version = "Not Installed"
-    try:
-        rclone_version = subprocess.check_output("rclone --version", shell=True).decode().split('\n')[0].split(' ')[1]
-    except Exception: pass
+    pyrogram_version = pyrogram.__version__
+    motor_version = motor.version
+    pymongo_version = pymongo.version
 
     bot_uptime_str = get_readable_time(int(bot_uptime))
     os_uptime_str = get_readable_time(int(time.time() - psutil.boot_time()))
@@ -113,9 +104,9 @@ def get_system_stats(bot_uptime):
 
 <b>📚 PACKAGES STATISTICS</b>
 <b>Python:</b> {python_version}
-<b>Aria2:</b> {aria2_version}
-<b>FFmpeg:</b> {ffmpeg_version}
-<b>Rclone:</b> {rclone_version}
+<b>Pyrogram:</b> {pyrogram_version}
+<b>Motor:</b> {motor_version}
+<b>Pymongo:</b> {pymongo_version}
 
 <b>Bot Uptime:</b> {bot_uptime_str}
 <b>OS Uptime:</b> {os_uptime_str}"""

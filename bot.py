@@ -14,6 +14,7 @@ from config import *
 from utils import *
 from tmdb import get_by_name
 from shorterner import shorten_url
+from system_stats import get_system_stats
 from database import (
     add_user, del_user, full_userbase, present_user,
     ban_user, is_user_banned, unban_user,
@@ -467,6 +468,12 @@ Unsuccessful: <code>{unsuccessful}</code></b>"""
         await asyncio.sleep(8)
         await msg.delete()
 
+@bot.on_message(filters.command(['system', 'sys']) & filters.private & filters.user(OWNER_ID))
+async def system_stats_command(client, message):
+    msg = await message.reply_text("Fetching system statistics... 📡")
+    stats = get_system_stats(tm() - bot_start_time)
+    await msg.edit(stats, parse_mode=enums.ParseMode.HTML)
+
 @bot.on_message(filters.command('stats') & filters.private & filters.user(OWNER_ID))
 async def get_stats(client, message):
     start_time = tm()
@@ -870,7 +877,8 @@ async def process_message(client, message):
 
     if media:
         file_unique_id = media.file_unique_id
-        caption = message.caption if message.caption else media.file_name
+        file_name = getattr(media, 'file_name', 'None')
+        caption = message.caption if message.caption else file_name
 
         if not file_unique_id:
             logger.error(f"File with missing file_unique_id received: {caption}")
@@ -880,8 +888,7 @@ async def process_message(client, message):
         hash_middle = None
         hash_end = None
         file_size = media.file_size
-        file_name = media.file_name
-        duration_raw = media.duration if hasattr(media, 'duration') else 0
+        duration_raw = getattr(media, 'duration', 0)
 
         if message.video or message.document:
             max_retries = 3

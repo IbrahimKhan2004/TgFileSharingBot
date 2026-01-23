@@ -379,8 +379,8 @@ async def remove_duplicate_command(client, message):
         await message.reply_text(
             "<b>Usage:</b>\n"
             "1. Reply to a file with <code>/remove_duplicate</code>\n"
-            "2. <code>/remove_duplicate <file_unique_id | content_hash | caption></code>\n\n"
-            "Please provide the unique ID, hash, or exact caption of the file to remove.",
+            "2. <code>/remove_duplicate <ID | Hash | Caption | Size | Name></code>\n\n"
+            "Please provide the unique ID, any hash (start/mid/end), exact caption, file name, or file size (in bytes) to remove.",
             parse_mode=enums.ParseMode.HTML
         )
         return
@@ -877,14 +877,39 @@ async def process_message(client, message):
             return
 
         content_hash = None
+        hash_middle = None
+        hash_end = None
+        file_size = media.file_size
+        file_name = media.file_name
+        duration_raw = media.duration if hasattr(media, 'duration') else 0
+
         if message.video or message.document:
             max_retries = 3
             for attempt in range(max_retries):
                 try:
-                    async for chunk in bot.stream_media(message, limit=1):
-                        if chunk:
-                            content_hash = hashlib.sha256(chunk).hexdigest()
+                    # Calculate Start Hash (Chunk 0)
+                    async for chunk in bot.stream_media(message, offset=0, limit=1):
+                        content_hash = hashlib.sha256(chunk).hexdigest()
                         break
+
+                    total_chunks = (file_size + (1024 * 1024) - 1) // (1024 * 1024)
+
+                    # Calculate Middle Hash
+                    if total_chunks > 2:
+                        async for chunk in bot.stream_media(message, offset=total_chunks // 2, limit=1):
+                            hash_middle = hashlib.sha256(chunk).hexdigest()
+                            break
+                    else:
+                        hash_middle = content_hash
+
+                    # Calculate End Hash (Last Chunk)
+                    if total_chunks > 1:
+                        async for chunk in bot.stream_media(message, offset=total_chunks - 1, limit=1):
+                            hash_end = hashlib.sha256(chunk).hexdigest()
+                            break
+                    else:
+                        hash_end = content_hash
+
                     break
                 except FloodWait as e:
                     if attempt < max_retries - 1:
@@ -899,19 +924,37 @@ async def process_message(client, message):
                     await bot.send_message(OWNER_ID, f"<b>Warning:</b> An error occurred during hash computation for <code>{caption}</code>. Proceeding without hash-based duplicate check.\n\n<b>Error:</b> {e}")
                     break
 
-        if await is_file_processed(file_unique_id, caption, content_hash):
-            logger.warning(f"Duplicate file detected and removed: {caption} (hash: {content_hash or 'N/A'})")
-            log_msg = (
-                f"<b>⚠️ Duplicate File Removed</b>\n\n"
-                f"<b>Caption:</b> {caption}\n"
-                f"<b>File ID:</b> <code>{file_unique_id}</code>\n"
-                f"<b>Hash:</b> <code>{content_hash or 'N/A'}</code>"
-            )
-            await bot.send_message(LOG_CHANNEL_ID, log_msg)
-            await message.delete()
-            return
+        duplicate_doc = await is_file_processed(file_unique_id, caption, content_hash, file_size, file_name, duration_raw)
+        if duplicate_doc:
+            match_reason = "Unique ID" if duplicate_doc['_id'] == file_unique_id else \
+                           "Caption" if duplicate_doc['caption'] == caption else \
+                           "Hash" if duplicate_doc.get('content_hash') == content_hash else \
+                           "Metadata (Size/Name/Duration)"
 
-        await add_processed_file(file_unique_id, caption, content_hash)
+            # If matched by hash, verify middle/end for extra certainty if they exist in DB
+            if match_reason == "Hash" and hash_middle and hash_end:
+                db_middle = duplicate_doc.get('hash_middle')
+                db_end = duplicate_doc.get('hash_end')
+                if db_middle and db_middle != hash_middle:
+                     match_reason = None # False positive by start hash only
+                elif db_end and db_end != hash_end:
+                     match_reason = None
+
+            if match_reason:
+                logger.warning(f"Duplicate file detected and removed: {caption} (Reason: {match_reason})")
+                log_msg = (
+                    f"<b>⚠️ Duplicate File Removed</b>\n\n"
+                    f"<b>Caption:</b> {caption}\n"
+                    f"<b>File Name:</b> <code>{file_name}</code>\n"
+                    f"<b>File ID:</b> <code>{file_unique_id}</code>\n"
+                    f"<b>Match Reason:</b> <code>{match_reason}</code>\n"
+                    f"<b>Hash (Start):</b> <code>{content_hash or 'N/A'}</code>"
+                )
+                await bot.send_message(LOG_CHANNEL_ID, log_msg)
+                await message.delete()
+                return
+
+        await add_processed_file(file_unique_id, caption, content_hash, hash_middle, hash_end, file_size, file_name, duration_raw)
 
         file_name = await remove_extension(caption)
         file_size = humanbytes(media.file_size)

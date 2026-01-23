@@ -19,35 +19,50 @@ config_collection = async_db['config']
 processed_files = async_db['processed_files']
 
 
-async def add_processed_file(file_unique_id, caption, content_hash=None):
-    """Adds a file's unique ID, caption, and content hash to the processed files collection."""
+async def add_processed_file(file_unique_id, caption, content_hash=None, hash_middle=None, hash_end=None, file_size=None, file_name=None, duration=None):
+    """Adds a file's metadata and hashes to the processed files collection."""
     try:
         document = {
             '_id': file_unique_id,
             'caption': caption,
             'processed_at': tm()
         }
-        if content_hash:
-            document['content_hash'] = content_hash
+        if content_hash: document['content_hash'] = content_hash
+        if hash_middle: document['hash_middle'] = hash_middle
+        if hash_end: document['hash_end'] = hash_end
+        if file_size: document['file_size'] = file_size
+        if file_name: document['file_name'] = file_name
+        if duration: document['duration'] = duration
 
         await processed_files.insert_one(document)
     except pymongo.errors.DuplicateKeyError:
         # This can happen in a race condition, it's safe to ignore
         pass
 
-async def is_file_processed(file_unique_id, caption, content_hash=None):
-    """Checks if a file is a duplicate by its unique ID, caption, or content hash."""
+async def is_file_processed(file_unique_id, caption, content_hash=None, file_size=None, file_name=None, duration=None):
+    """
+    Checks if a file is a duplicate.
+    Returns the matching document if found, otherwise None.
+    """
     query_conditions = [
         {'_id': file_unique_id},
         {'caption': caption}
     ]
 
-    if content_hash is not None:
+    if content_hash:
         query_conditions.append({'content_hash': content_hash})
+
+    # Composite check for re-uploads with different IDs/Hashes
+    if file_size and file_name:
+        query_conditions.append({
+            'file_size': file_size,
+            'file_name': file_name,
+            'duration': duration
+        })
 
     query = {'$or': query_conditions}
 
-    return bool(await processed_files.find_one(query))
+    return await processed_files.find_one(query)
 
 async def remove_processed_file_by_caption(caption: str):
     """Removes a file's record from the processed files collection based on its caption."""
@@ -65,23 +80,34 @@ async def remove_processed_file_by_id_or_hash(file_unique_id: str, content_hash:
     return result.deleted_count
 
 async def remove_any_duplicate(arg: str):
-    """Removes a record matching the argument by _id (file_unique_id), content_hash, or caption."""
+    """Removes a record matching the argument by _id, hashes, or caption."""
     query = {
         '$or': [
             {'_id': arg},
             {'content_hash': arg},
+            {'hash_middle': arg},
+            {'hash_end': arg},
+            {'file_name': arg},
             {'caption': arg}
         ]
     }
+
     result = await processed_files.delete_many(query)
     return result.deleted_count
 
 async def ensure_indexes():
     """Ensures necessary indexes are created on startup."""
     await processed_files.create_index([("caption", pymongo.ASCENDING)])
-    # A sparse index only contains entries for documents that have the indexed field.
-    # This is ideal because we only compute hashes for certain file types (video/document).
     await processed_files.create_index([("content_hash", pymongo.ASCENDING)], sparse=True)
+    await processed_files.create_index([("hash_middle", pymongo.ASCENDING)], sparse=True)
+    await processed_files.create_index([("hash_end", pymongo.ASCENDING)], sparse=True)
+    await processed_files.create_index([("file_name", pymongo.ASCENDING)], sparse=True)
+    # Compound index for re-upload detection
+    await processed_files.create_index([
+        ("file_name", pymongo.ASCENDING),
+        ("file_size", pymongo.ASCENDING),
+        ("duration", pymongo.ASCENDING)
+    ], sparse=True)
 
 async def save_shortener_link(request_id: str, shortened_url: str):
     """Saves the shortened URL mapping."""

@@ -128,9 +128,17 @@ Create a `config.env` file in the root directory or set these environment variab
 | `DAILY_LIMIT`         | Maximum number of files a user can download per token validity period.                                     | `10`                               |
 | `FORCE_SUB_CHANNEL`   | (Optional) Channel ID or Link that users must join to use the bot.                                         | `-100xxxx` or `https://t.me/xxxx`  |
 | `AUTO_DELETE_TIME`    | (Optional) Time in seconds to auto-delete sent files. Defaults to 60s.                                     | `60`                               |
+| `MONGO_URI_2`         | (Optional) Second MongoDB URI for multi-database failover support.                                         | `mongodb+srv://...`                |
 | `CONFIG_FILE_URL`     | (Optional) A direct URL to a `config.env` file. If set, the bot will try to download it on startup/update. |                                    |
 | `UPSTREAM_REPO`       | (Optional) Git repository URL for bot updates (used by `update.py`). Defaults to original repo.            |                                    |
 | `UPSTREAM_BRANCH`     | (Optional) Git repository branch for bot updates. Defaults to `main`.                                      |                                    |
+
+## Multi-Database Support
+
+The bot supports a dual-database architecture to handle storage limits (e.g., free tier quotas).
+*   **Failover Writes:** If the primary `MONGO_URI` is full or fails to write, the bot automatically tries to save the data to `MONGO_URI_2`.
+*   **Unified Reads:** When checking for duplicates or user data, the bot searches the primary database first. If not found, it seamlessly checks the secondary database.
+*   **Maintenance:** Admin commands like `/dbstats` and `/cleandb` operate on **both** databases simultaneously.
 
 ## Deployment
 
@@ -218,6 +226,8 @@ reset_limit - Reset a user's file limit
 expire_token - Expire a user's token
 restart - Restart the bot
 remove_duplicate - Remove a duplicate file record
+dbstats - Check database storage usage (Owner Only)
+cleandb - Clean database records (Owner Only)
 ```
 
 ### User Commands (Private Chat with Bot)

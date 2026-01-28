@@ -68,7 +68,7 @@ async def add_processed_file(file_unique_id, caption, content_hash=None, hash_mi
         logger.warning(f"Unexpected error on DB 1: {e}. Attempting DB 2...")
 
     # Fallback to DB 2 if available
-    if processed_files_2:
+    if processed_files_2 is not None:
         try:
             await processed_files_2.insert_one(document)
             logger.info(f"Saved file {file_unique_id} to DB 2.")
@@ -109,7 +109,7 @@ async def is_file_processed(file_unique_id, caption, content_hash=None, file_siz
         return result
 
     # Check DB 2 (if available)
-    if processed_files_2:
+    if processed_files_2 is not None:
         result_2 = await processed_files_2.find_one(query)
         if result_2:
             return result_2
@@ -124,7 +124,7 @@ async def remove_processed_file_by_caption(caption: str):
     deleted_count += res1.deleted_count
 
     # Delete from DB 2
-    if processed_files_2:
+    if processed_files_2 is not None:
         res2 = await processed_files_2.delete_one({'caption': caption})
         deleted_count += res2.deleted_count
 
@@ -144,7 +144,7 @@ async def remove_processed_file_by_id_or_hash(file_unique_id: str, content_hash:
     deleted_count += res1.deleted_count
 
     # Delete from DB 2
-    if processed_files_2:
+    if processed_files_2 is not None:
         res2 = await processed_files_2.delete_many(query)
         deleted_count += res2.deleted_count
 
@@ -169,7 +169,7 @@ async def remove_any_duplicate(arg: str):
     deleted_count += res1.deleted_count
 
     # Delete from DB 2
-    if processed_files_2:
+    if processed_files_2 is not None:
         res2 = await processed_files_2.delete_many(query)
         deleted_count += res2.deleted_count
 
@@ -191,7 +191,7 @@ async def ensure_indexes():
         ], sparse=True)
 
     await create_idxs(processed_files)
-    if processed_files_2:
+    if processed_files_2 is not None:
         await create_idxs(processed_files_2)
 
 async def save_shortener_link(request_id: str, shortened_url: str):
@@ -222,7 +222,7 @@ async def present_user(user_id : int):
     if found: return True
 
     # Check DB 2
-    if user_data_2:
+    if user_data_2 is not None:
         found_2 = await user_data_2.find_one({'_id': user_id})
         return bool(found_2)
 
@@ -248,7 +248,7 @@ async def add_user(user_id: int):
     except Exception:
         pass
 
-    if user_data_2:
+    if user_data_2 is not None:
         try:
             await user_data_2.insert_one(user_doc)
         except:
@@ -268,13 +268,13 @@ async def update_user_data(user_id: int, data: dict):
     )
 
     # If not found in DB 1, try DB 2
-    if res.matched_count == 0 and user_data_2:
+    if res.matched_count == 0 and user_data_2 is not None:
         await user_data_2.update_one(
             {'_id': user_id},
             {'$set': update_doc},
             upsert=True # If user moved to DB2 or new
         )
-    elif res.matched_count == 0 and not user_data_2:
+    elif res.matched_count == 0 and user_data_2 is None:
         # If DB2 not active, upsert to DB1
          await user_data.update_one(
             {'_id': user_id},
@@ -286,7 +286,7 @@ async def update_user_data(user_id: int, data: dict):
 async def get_user_data(user_id: int):
     """Gets the user's data. Checks both DBs."""
     user = await user_data.find_one({'_id': user_id})
-    if not user and user_data_2:
+    if not user and user_data_2 is not None:
         user = await user_data_2.find_one({'_id': user_id})
 
     if user:
@@ -306,7 +306,7 @@ async def increment_file_count(user_id: int):
         {'_id': user_id},
         {'$inc': {'file_count': 1}}
     )
-    if res.matched_count == 0 and user_data_2:
+    if res.matched_count == 0 and user_data_2 is not None:
         await user_data_2.update_one(
             {'_id': user_id},
             {'$inc': {'file_count': 1}}
@@ -329,7 +329,7 @@ async def load_all_user_data():
         }
 
     # Load from DB 2 (Overwrites if duplicate ID, which shouldn't happen ideally)
-    if user_data_2:
+    if user_data_2 is not None:
         async for user in user_data_2.find({}):
             all_user_data[user['_id']] = {
                 'token': user.get('token'),
@@ -347,7 +347,7 @@ async def full_userbase():
     async for doc in user_data.find():
         user_ids.append(doc['_id'])
         
-    if user_data_2:
+    if user_data_2 is not None:
         async for doc in user_data_2.find():
             if doc['_id'] not in user_ids:
                 user_ids.append(doc['_id'])
@@ -356,7 +356,7 @@ async def full_userbase():
 
 async def del_user(user_id: int):
     await user_data.delete_one({'_id': user_id})
-    if user_data_2:
+    if user_data_2 is not None:
         await user_data_2.delete_one({'_id': user_id})
     return
 
@@ -387,7 +387,7 @@ async def increment_bypass_attempts(user_id: int):
         {'_id': user_id},
         {'$inc': {'bypass_attempts': 1}}
     )
-    if res.matched_count == 0 and user_data_2:
+    if res.matched_count == 0 and user_data_2 is not None:
          await user_data_2.update_one(
             {'_id': user_id},
             {'$inc': {'bypass_attempts': 1}}
@@ -400,7 +400,7 @@ async def reset_bypass_attempts(user_id: int):
         {'_id': user_id},
         {'$set': {'bypass_attempts': 0}}
     )
-    if res.matched_count == 0 and user_data_2:
+    if res.matched_count == 0 and user_data_2 is not None:
         await user_data_2.update_one(
             {'_id': user_id},
             {'$set': {'bypass_attempts': 0}}
@@ -501,7 +501,7 @@ async def get_expired_users(expiry_threshold):
         expired_user_ids.append(doc['_id'])
 
     # DB 2
-    if user_data_2:
+    if user_data_2 is not None:
         async for doc in user_data_2.find(query, {'_id': 1}):
             if doc['_id'] not in expired_user_ids:
                 expired_user_ids.append(doc['_id'])
@@ -526,7 +526,7 @@ async def get_inactive_unverified_users(inactive_threshold):
     async for doc in user_data.find(query, {'_id': 1}):
         inactive_user_ids.append(doc['_id'])
 
-    if user_data_2:
+    if user_data_2 is not None:
         async for doc in user_data_2.find(query, {'_id': 1}):
             if doc['_id'] not in inactive_user_ids:
                 inactive_user_ids.append(doc['_id'])
@@ -540,7 +540,7 @@ async def delete_users_bulk(user_ids):
     res1 = await user_data.delete_many({'_id': {'$in': user_ids}})
     deleted += res1.deleted_count
 
-    if user_data_2:
+    if user_data_2 is not None:
         res2 = await user_data_2.delete_many({'_id': {'$in': user_ids}})
         deleted += res2.deleted_count
 
@@ -570,7 +570,7 @@ async def get_db_stats():
     except Exception as e:
         stats_text += f"<b>DB 1:</b> Error fetching stats: {e}\n\n"
 
-    if async_db_2:
+    if async_db_2 is not None:
         try:
             db2_stats = await async_db_2.command("dbStats")
             data_size = humanbytes(db2_stats.get('dataSize'))
@@ -596,7 +596,7 @@ async def clean_db(target: str):
         try:
             r1 = await processed_files.delete_many({})
             count = r1.deleted_count
-            if processed_files_2:
+            if processed_files_2 is not None:
                 r2 = await processed_files_2.delete_many({})
                 count += r2.deleted_count
             msg += f"✅ Removed {count} processed file records.\n"
@@ -608,7 +608,7 @@ async def clean_db(target: str):
         try:
             r1 = await user_data.delete_many({})
             count = r1.deleted_count
-            if user_data_2:
+            if user_data_2 is not None:
                 r2 = await user_data_2.delete_many({})
                 count += r2.deleted_count
             msg += f"✅ Removed {count} user records.\n"

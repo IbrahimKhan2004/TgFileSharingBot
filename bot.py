@@ -23,7 +23,8 @@ from database import (
     reset_daily_stats_v2, save_shortener_link, get_dynamic_config, update_dynamic_config,
     get_expired_users, increment_verified_today, increment_files_shared_today, get_daily_stats,
     get_inactive_unverified_users, delete_users_bulk, add_processed_file, is_file_processed, ensure_indexes,
-    remove_processed_file_by_caption, remove_processed_file_by_id_or_hash, remove_any_duplicate
+    remove_processed_file_by_caption, remove_processed_file_by_id_or_hash, remove_any_duplicate,
+    get_db_stats, clean_db
 )
 import urllib.parse
 from datetime import datetime, timedelta, timezone, time
@@ -591,6 +592,38 @@ async def my_status(client, message):
     )
 
     await message.reply_text(response)
+
+@bot.on_message(filters.command("dbstats") & filters.user(OWNER_ID))
+async def db_stats_command(client, message):
+    msg = await message.reply_text("Fetching DB stats... 📡")
+    stats = await get_db_stats()
+    await msg.edit(stats, parse_mode=enums.ParseMode.HTML)
+
+@bot.on_message(filters.command("cleandb") & filters.user(OWNER_ID))
+async def clean_db_command(client, message):
+    if len(message.command) < 2:
+        await message.reply_text(
+            "<b>Usage:</b> <code>/cleandb [target]</code>\n\n"
+            "<b>Targets:</b>\n"
+            "• <code>files</code>: Remove all processed file history.\n"
+            "• <code>users</code>: Remove all user data.\n"
+            "• <code>all</code>: Remove everything (fresh start).",
+            parse_mode=enums.ParseMode.HTML
+        )
+        return
+
+    target = message.command[1].lower()
+
+    if target not in ['files', 'users', 'all']:
+        await message.reply_text("❌ Invalid target. Use <code>files</code>, <code>users</code>, or <code>all</code>.")
+        return
+
+    # Confirmation step could be added here, but for now executing directly as per owner-only
+    msg = await message.reply_text(f"🧹 Cleaning <b>{target}</b> data... Please wait.", parse_mode=enums.ParseMode.HTML)
+
+    result = await clean_db(target)
+
+    await msg.edit(result)
 
 @bot.on_message(filters.command("settings") & filters.user(OWNER_ID))
 async def settings_command(client, message):

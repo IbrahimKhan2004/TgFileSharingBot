@@ -866,7 +866,7 @@ async def process_queue():
         if message is None:  
             break
         await process_message(bot, message) 
-        await asyncio.sleep(5) # Throttle processing to prevent floods
+        await asyncio.sleep(6) # Throttle processing to prevent floods
         message_queue.task_done()
 
 async def process_message(client, message):
@@ -890,6 +890,26 @@ async def process_message(client, message):
         file_size = media.file_size
         duration_raw = getattr(media, 'duration', 0)
 
+        # Pre-check for duplicates (Database First) to avoid unnecessary downloads
+        duplicate_doc = await is_file_processed(file_unique_id, caption, None, file_size, file_name, duration_raw)
+        if duplicate_doc:
+            match_reason = "Unique ID" if duplicate_doc['_id'] == file_unique_id else \
+                           "Caption" if duplicate_doc['caption'] == caption else \
+                           "Metadata (Size/Name/Duration)"
+
+            logger.warning(f"Duplicate file detected and removed (Pre-check): {caption} (Reason: {match_reason})")
+            log_msg = (
+                f"<b>⚠️ Duplicate File Removed</b>\n\n"
+                f"<b>Caption:</b> {caption}\n"
+                f"<b>File Name:</b> <code>{file_name}</code>\n"
+                f"<b>File ID:</b> <code>{file_unique_id}</code>\n"
+                f"<b>Match Reason:</b> <code>{match_reason}</code>\n"
+                f"<b>Status:</b> Skipped Download 🚀"
+            )
+            await bot.send_message(LOG_CHANNEL_ID, log_msg)
+            await message.delete()
+            return
+
         if message.video or message.document:
             max_retries = 3
             for attempt in range(max_retries):
@@ -899,6 +919,8 @@ async def process_message(client, message):
                         content_hash = hashlib.sha256(chunk).hexdigest()
                         break
 
+                    await asyncio.sleep(6)
+
                     total_chunks = (file_size + (1024 * 1024) - 1) // (1024 * 1024)
 
                     # Calculate Middle Hash
@@ -906,6 +928,7 @@ async def process_message(client, message):
                         async for chunk in bot.stream_media(message, offset=total_chunks // 2, limit=1):
                             hash_middle = hashlib.sha256(chunk).hexdigest()
                             break
+                        await asyncio.sleep(6)
                     else:
                         hash_middle = content_hash
 

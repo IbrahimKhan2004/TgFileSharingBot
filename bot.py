@@ -70,6 +70,8 @@ async def load_initial_data():
         'MINIMUM_DURATION': int(db_config.get('MINIMUM_DURATION', MINIMUM_DURATION)),
         'SHORTERNER_URL': db_config.get('SHORTERNER_URL', SHORTERNER_URL),
         'URLSHORTX_API_TOKEN': db_config.get('URLSHORTX_API_TOKEN', URLSHORTX_API_TOKEN),
+        'SHORTERNER_URL_2': db_config.get('SHORTERNER_URL_2', SHORTERNER_URL_2),
+        'URLSHORTX_API_TOKEN_2': db_config.get('URLSHORTX_API_TOKEN_2', URLSHORTX_API_TOKEN_2),
         'TUT_ID': int(db_config.get('TUT_ID', TUT_ID)),
         'DAILY_LIMIT': int(db_config.get('DAILY_LIMIT', DAILY_LIMIT)),
         'TOKEN_TIMEOUT': int(db_config.get('TOKEN_TIMEOUT', TOKEN_TIMEOUT)),
@@ -128,6 +130,11 @@ async def start_command(client, message):
             if command_arg.startswith("token_"):
                 input_token = command_arg[6:]
                 
+                # Check for Extension Token
+                if input_token.startswith("ext_"):
+                     await handle_extension_token(client, message, user_id, input_token[4:])
+                     return
+
                 if user_data.get(user_id, {}).get('status') == 'verified':
                     reply = await safe_api_call(lambda: message.reply_text("You are already verified! ✅"))
                     await auto_delete_message(message, reply)
@@ -563,9 +570,13 @@ async def my_status(client, message):
     status = udata.get('status', 'unverified')
     file_count = udata.get('file_count', 0)
     token_time = udata.get('time', 0)
+    extension_stage = udata.get('extension_stage', 0)
 
     daily_limit = bot_config.get('DAILY_LIMIT', DAILY_LIMIT)
     token_timeout = bot_config.get('TOKEN_TIMEOUT', TOKEN_TIMEOUT)
+
+    # Calculate total allowed based on extensions
+    total_allowed = daily_limit * (1 + extension_stage)
 
     user_link = await get_user_link(message.from_user)
 
@@ -588,7 +599,7 @@ async def my_status(client, message):
         f"👤 <b>Name:</b> {user_link}\n\n"
         f"🔐 <b>Status:</b> {status_text}\n"
         f"⏳ <b>Expires in:</b> {expiry_text}\n"
-        f"📂 <b>Daily Limit:</b> {file_count}/{daily_limit}"
+        f"📂 <b>Daily Limit:</b> {file_count}/{daily_limit} (Stage {extension_stage})"
     )
 
     await message.reply_text(response)
@@ -629,8 +640,10 @@ async def clean_db_command(client, message):
 async def settings_command(client, message):
     buttons = [
         [InlineKeyboardButton(f"Min Duration: {bot_config.get('MINIMUM_DURATION')}s", callback_data="set_duration")],
-        [InlineKeyboardButton(f"Shortener URL: {bot_config.get('SHORTERNER_URL')}", callback_data="set_shortener")],
-        [InlineKeyboardButton(f"API Token: {bot_config.get('URLSHORTX_API_TOKEN')}", callback_data="set_api_token")],
+        [InlineKeyboardButton(f"Shortener URL 1: {bot_config.get('SHORTERNER_URL')}", callback_data="set_shortener")],
+        [InlineKeyboardButton(f"API Token 1: {bot_config.get('URLSHORTX_API_TOKEN')}", callback_data="set_api_token")],
+        [InlineKeyboardButton(f"Shortener URL 2: {bot_config.get('SHORTERNER_URL_2', 'Not Set')}", callback_data="set_shortener_2")],
+        [InlineKeyboardButton(f"API Token 2: {bot_config.get('URLSHORTX_API_TOKEN_2', 'Not Set')}", callback_data="set_api_token_2")],
         [InlineKeyboardButton(f"Tutorial ID: {bot_config.get('TUT_ID')}", callback_data="set_tut_id")],
         [InlineKeyboardButton(f"Daily Limit: {bot_config.get('DAILY_LIMIT')}", callback_data="set_daily_limit")],
         [InlineKeyboardButton(f"Token Timeout: {bot_config.get('TOKEN_TIMEOUT')}s", callback_data="set_token_timeout")],
@@ -648,9 +661,13 @@ async def settings_callback(client, callback_query):
     if action == "set_duration":
         prompt = "Send new <b>Minimum Duration</b> (in seconds):"
     elif action == "set_shortener":
-        prompt = "Send new <b>Shortener URL</b> (domain):"
+        prompt = "Send new <b>Shortener URL 1</b> (domain):"
     elif action == "set_api_token":
-        prompt = "Send new <b>API Token</b>:"
+        prompt = "Send new <b>API Token 1</b>:"
+    elif action == "set_shortener_2":
+        prompt = "Send new <b>Shortener URL 2</b> (domain):"
+    elif action == "set_api_token_2":
+        prompt = "Send new <b>API Token 2</b>:"
     elif action == "set_tut_id":
         prompt = "Send new <b>Tutorial Message ID</b>:"
     elif action == "set_daily_limit":
@@ -670,13 +687,8 @@ async def settings_callback(client, callback_query):
     try:
         user_response = await client.listen(chat_id=callback_query.from_user.id, user_id=callback_query.from_user.id, timeout=60)
 
-        # Check if the user sent a command (e.g. /settings) instead of a value
         if user_response.text and user_response.text.startswith("/"):
             await prompt_msg.edit("❌ Input cancelled. You sent a command.")
-            # Process the command normally by re-triggering (or just let the user send it again)
-            # Since listen consumes the message, the bot won't process it as a command automatically
-            # unless we manually re-dispatch or just tell user to retry.
-            # Here we just cancel the setting update.
             return
 
         new_value = user_response.text.strip()
@@ -694,6 +706,10 @@ async def settings_callback(client, callback_query):
             key = 'SHORTERNER_URL'
         elif action == "set_api_token":
             key = 'URLSHORTX_API_TOKEN'
+        elif action == "set_shortener_2":
+            key = 'SHORTERNER_URL_2'
+        elif action == "set_api_token_2":
+            key = 'URLSHORTX_API_TOKEN_2'
         elif action == "set_tut_id":
              if new_value.isdigit():
                 key = 'TUT_ID'
@@ -777,7 +793,8 @@ async def verify_command(client, message):
                 "time": current_time,
                 "status": "verified",
                 "file_count": 0,
-                "inittime": current_time
+                "inittime": current_time,
+                "extension_stage": 0
             }
 
             await update_user_data(user_id_to_verify, new_data)
@@ -872,7 +889,7 @@ async def expire_token_command(client, message):
         return
 
     # Expire the token by updating status and resetting time/file_count
-    update_data = {'status': 'unverified', 'time': 0, 'file_count': 0}
+    update_data = {'status': 'unverified', 'time': 0, 'file_count': 0, 'extension_stage': 0}
     await update_user_data(user_id_to_expire, update_data)
     if user_id_to_expire in user_data:
         user_data[user_id_to_expire].update(update_data)
@@ -891,6 +908,231 @@ async def expire_token_command(client, message):
         admin_confirmation += f"\n\n(Could not notify user due to an error: {e})."
 
     await message.reply_text(admin_confirmation)
+
+async def check_access(message, user_id):
+    udata = user_data.get(user_id)
+    if not udata:
+        udata = await get_user_data(user_id)
+        if not udata:
+            # This case happens for new users who are not in the DB yet
+            button = await genrate_token(user_id)
+            send_message = await message.reply_text(
+                                                    text=f"👋 Welcome! Please get a token to access files. 🚀",
+                                                    reply_markup=button
+                                                    )
+            await auto_delete_message(message, send_message)
+            return False
+        user_data[user_id] = udata
+
+    time = udata.get('time', 0)
+    status = udata.get('status', 'unverified')
+    file_count = udata.get('file_count', 0)
+    extension_stage = udata.get('extension_stage', 0)
+
+    token_timeout = bot_config.get('TOKEN_TIMEOUT', TOKEN_TIMEOUT)
+    daily_limit = bot_config.get('DAILY_LIMIT', DAILY_LIMIT)
+
+    expiry = time + token_timeout
+    current_time = tm()
+
+    if current_time < expiry and status == "verified":
+        if file_count < daily_limit:
+            return True
+        else:
+            # CHECK FOR EXTENSION
+            max_extensions = 2 # Hard limit
+            if extension_stage < max_extensions:
+                # User can extend
+                button = await generate_extension_token(user_id, extension_stage)
+                msg_text = (
+                    f"⚠️ <b>Limit Reached!</b>\n\n"
+                    f"You have used your daily limit of {daily_limit} files.\n"
+                    f"But don't worry! You can get an <b>EXTRA {daily_limit} FILES</b> by verifying one more time.\n\n"
+                    f"👇 Click below to extend your limit!"
+                )
+                reply = await message.reply_text(msg_text, reply_markup=button)
+                await auto_delete_message(message, reply)
+                return False
+            else:
+                reply = await message.reply_text(f"❌ Maximum limit reached for today. You have already extended your limit {max_extensions} times. Please wait until your token expires.")
+                await auto_delete_message(message, reply)
+                return False
+    else:
+        button = await update_token(user_id)
+        send_message = await message.reply_text(
+                                                text=f"👋 Your token has expired. Please get a new token to continue. 🚀",
+                                                reply_markup=button
+                                                )
+        await auto_delete_message(message, send_message)
+        return False
+
+async def generate_extension_token(user_id, current_stage):
+    try:
+        # Using a special prefix 'ext_' to identify extension tokens
+        token = "ext_" + str(uuid.uuid4())
+
+        # We don't need to save this token to user_data YET,
+        # we just verify it against the one sent back.
+        # However, to be secure, we should probably store it.
+        # But for simplicity and consistent flow, we can just treat it as a verification string
+        # that the user copies back.
+        # Wait, the verification logic compares input_token == stored_token.
+        # So we MUST store it.
+
+        # BUT, if we overwrite the main token, the 'expiry' check might fail if we change 'time'.
+        # We should NOT change 'time' (token creation time) during extension.
+
+        # Actually, let's store it as the main token. It's fine.
+        # The expiry logic checks (time + timeout), so changing 'token' string doesn't affect 'time'.
+        new_data = {"token": token}
+        await update_user_data(user_id, new_data)
+        user_data[user_id].update(new_data)
+
+        bot_deep_link = f'https://telegram.dog/{bot_username}?start=token_{token}'
+
+        # Use Second Shortener if available, else fallback to Primary
+        shortener_url = bot_config.get('SHORTERNER_URL_2')
+        api_token = bot_config.get('URLSHORTX_API_TOKEN_2')
+
+        if not shortener_url or not api_token:
+             # Fallback
+             shortener_url = bot_config.get('SHORTERNER_URL')
+             api_token = bot_config.get('URLSHORTX_API_TOKEN')
+
+        external_shortened_url = await shorten_url(
+            bot_deep_link,
+            base_site=shortener_url,
+            api_token=api_token
+        )
+
+        request_id = str(uuid.uuid4())
+        await save_shortener_link(request_id, external_shortened_url)
+
+        flask_gate_link = f"{FLASK_APP_BASE_URL}/gate?id={request_id}"
+
+        button = InlineKeyboardMarkup([[InlineKeyboardButton("🔓 Get Extra Limit (+20 Files)", url=flask_gate_link)]])
+        return button
+    except Exception as e:
+        logger.error(f"error in gen_ext_token: {e}")
+        return InlineKeyboardMarkup([[InlineKeyboardButton("Error", callback_data="error")]])
+
+async def handle_extension_token(client, message, user_id, input_token):
+    # This is called when start param is 'token_ext_...'
+    # input_token here is just the UUID part (stripped 'ext_')
+    # Reconstruction:
+    full_token = "ext_" + input_token
+
+    udata = user_data.get(user_id) or await get_user_data(user_id)
+    if not udata:
+        await message.reply_text("User data not found.")
+        return
+
+    stored_token = udata.get('token')
+
+    if full_token == stored_token:
+        # Success!
+        current_stage = udata.get('extension_stage', 0)
+        new_stage = current_stage + 1
+        daily_limit = bot_config.get('DAILY_LIMIT', DAILY_LIMIT)
+
+        # Reset file count to 0 to give fresh batch
+        new_data = {
+            "file_count": 0,
+            "extension_stage": new_stage
+            # We do NOT reset 'time' (start time)
+        }
+
+        await update_user_data(user_id, new_data)
+        user_data[user_id].update(new_data)
+
+        reply_text = (
+            f"✅ <b>Limit Extended!</b> (Stage {new_stage})\n\n"
+            f"You have successfully verified. You can now download <b>{daily_limit} more files</b>.\n"
+            f"Enjoy!"
+        )
+        await message.reply_text(reply_text)
+        await safe_api_call(lambda: bot.send_message(LOG_CHANNEL_ID, f"User {user_id} extended limit to Stage {new_stage}."))
+    else:
+        await message.reply_text("❌ Invalid or Expired Extension Link.")
+
+
+async def check_expired_tokens():
+    logging.info("Task started: check_expired_tokens")
+    global user_data
+    while True:
+        try:
+            token_timeout = bot_config.get('TOKEN_TIMEOUT', TOKEN_TIMEOUT)
+            expiry_threshold = tm() - token_timeout
+
+            expired_users = await get_expired_users(expiry_threshold)
+
+            if expired_users:
+                logger.info(f"Found {len(expired_users)} expired tokens. Processing...")
+
+                for user_id in expired_users:
+                    # Update status in DB - RESET EXTENSION STAGE TOO
+                    await update_user_data(user_id, {'status': 'unverified', 'extension_stage': 0})
+
+                    # Update local cache
+                    if user_id in user_data:
+                        user_data[user_id]['status'] = 'unverified'
+                        user_data[user_id]['extension_stage'] = 0
+
+                    # Notify user
+                    logging.info(f"Attempting to notify user {user_id} of token expiry...")
+                    try:
+                        button = await update_token(user_id)
+                        await safe_api_call(lambda: bot.send_message(
+                            user_id,
+                            "⚠️ <b>Token Expired</b>\n\nYour access has expired. Please get a new token to continue.",
+                            reply_markup=button
+                        ))
+                        logging.info(f"Successfully notified user {user_id}.")
+                    except UserIsBlocked:
+                        logging.info(f"Could not notify user {user_id}: User has blocked the bot.")
+                        pass # User blocked bot
+                    except InputUserDeactivated:
+                        logging.info(f"Could not notify user {user_id}: User account is deactivated.")
+                        pass # User deleted account
+                    except Exception as e:
+                        logger.warning(f"Failed to notify user {user_id} about expiry: {e}")
+
+                    await asyncio.sleep(4) # Prevent FloodWait
+
+        except Exception as e:
+            logger.error(f"Error in token expiry check: {e}")
+
+        # Check every 5 minutes
+        await asyncio.sleep(300)
+
+async def prune_inactive_users_scheduler():
+    """A background task that runs once a day to prune inactive users."""
+    while True:
+        try:
+            # Set the inactivity period to 40 days
+            inactive_period_days = 40
+            inactive_threshold = tm() - (inactive_period_days * 24 * 60 * 60)
+
+            # Find and delete inactive users
+            inactive_user_ids = await get_inactive_unverified_users(inactive_threshold)
+
+            if inactive_user_ids:
+                deleted_count = await delete_users_bulk(inactive_user_ids)
+
+                # Log the result
+                summary_message = f"✅ Automated Prune: Removed {deleted_count} inactive unverified users."
+                logging.info(summary_message)
+                await safe_api_call(lambda: bot.send_message(LOG_CHANNEL_ID, summary_message))
+            else:
+                logging.info("Automated Prune: No inactive users found to remove.")
+
+        except Exception as e:
+            error_message = f"Error in prune_inactive_users_scheduler: {e}"
+            logging.error(error_message)
+            await safe_api_call(lambda: bot.send_message(LOG_CHANNEL_ID, error_message))
+
+        # Sleep for 24 hours before the next run
+        await asyncio.sleep(24 * 60 * 60)
 
 async def process_queue():
     logging.info("Task started: process_queue")
@@ -1096,315 +1338,6 @@ async def process_message(client, message):
     
     elif message.sticker:
         await safe_api_call(lambda: message.copy(UPDATE_CHANNEL_ID))
-
-
-@bot.on_message(filters.command('restart') & filters.private & filters.user(OWNER_ID))
-async def restart(client, message):
-    os.system("python3 update.py")  
-    os.execl(sys.executable, sys.executable, "bot.py")
-
-async def check_force_sub(client, message, user_id):
-    force_sub_channel = bot_config.get('FORCE_SUB_CHANNEL')
-    if not force_sub_channel:
-        return True
-
-    try:
-        force_sub_channel = clean_force_sub_url(force_sub_channel)
-        user = await client.get_chat_member(force_sub_channel, user_id)
-        if user.status == enums.ChatMemberStatus.BANNED:
-            await message.reply_text("You are banned from the update channel. Contact admin.")
-            return False
-        return True
-    except UserNotParticipant:
-        try:
-            invite_link = await client.export_chat_invite_link(force_sub_channel)
-        except Exception:
-            # Fallback if bot can't export link (maybe public channel)
-            if str(force_sub_channel).startswith("-100"):
-                 # It's an ID, difficult to guess link if not public/admin
-                 invite_link = "Please contact admin for link."
-            else:
-                 # It's likely a username
-                 invite_link = f"https://t.me/{force_sub_channel}" if not str(force_sub_channel).startswith("http") else force_sub_channel
-
-        join_button = InlineKeyboardButton("📢 Join Channel", url=invite_link)
-
-        # Preserve original start command args
-        username = client.me.username or bot_username
-        if len(message.command) > 1:
-            start_arg = message.command[1]
-            try_again_url = f"https://t.me/{username}?start={start_arg}"
-        else:
-             try_again_url = f"https://t.me/{username}?start=start"
-
-        try_again_button = InlineKeyboardButton("🔄 Try Again", url=try_again_url)
-
-        text = "<b>👋 You must join our channel to use this bot.\n\nPLEASE JOIN OUR CHANNEL TO GET FILES 👇</b>"
-        await message.reply_text(
-            text,
-            reply_markup=InlineKeyboardMarkup([[join_button], [try_again_button]]),
-            parse_mode=enums.ParseMode.HTML
-        )
-        return False
-    except Exception as e:
-        logger.error(f"Force sub check error: {e}")
-        # In case of error (e.g. invalid channel ID), let the user pass to avoid blocking them completely
-        # or notify admin. For now, letting them pass is safer for UX if config is bad.
-        return True
-
-async def verify_token(user_id, input_token):
-    current_time = tm()
-    
-    # Get user data from local cache or DB
-    udata = user_data.get(user_id)
-    if not udata:
-        udata = await get_user_data(user_id)
-        if not udata:
-            return 'Token Mismatched ❌'
-        user_data[user_id] = udata
-
-    stored_token = udata.get('token')
-    if input_token == stored_token:
-        new_token = str(uuid.uuid4())
-        new_data = {"token": new_token, "time": current_time, "status": "verified", "file_count": 0, "inittime": current_time}
-        await update_user_data(user_id, new_data)
-        await increment_verified_today() # New line to track daily verifications
-        user_data[user_id] = {**udata, **new_data} # Update local cache
-        token_timeout = bot_config.get('TOKEN_TIMEOUT', TOKEN_TIMEOUT)
-        return f'Token Verified ✅ (Validity: {get_readable_time(token_timeout)})'
-    else:
-        return f'Token Mismatched ❌'
-
-async def check_access(message, user_id):
-    udata = user_data.get(user_id)
-    if not udata:
-        udata = await get_user_data(user_id)
-        if not udata:
-            # This case happens for new users who are not in the DB yet
-            button = await genrate_token(user_id)
-            send_message = await message.reply_text( 
-                                                    text=f"👋 Welcome! Please get a token to access files. 🚀",
-                                                    reply_markup=button
-                                                    )
-            await auto_delete_message(message, send_message)
-            return False
-        user_data[user_id] = udata
-
-    time = udata.get('time', 0)
-    status = udata.get('status', 'unverified')
-    file_count = udata.get('file_count', 0)
-
-    token_timeout = bot_config.get('TOKEN_TIMEOUT', TOKEN_TIMEOUT)
-    daily_limit = bot_config.get('DAILY_LIMIT', DAILY_LIMIT)
-
-    expiry = time + token_timeout
-    current_time = tm()
-
-    if current_time < expiry and status == "verified":
-        if file_count < daily_limit:
-            return True
-        else:
-            reply = await message.reply_text(f"You have reached the daily limit. Please wait until the token expires.")
-            await auto_delete_message(message, reply)
-            return False
-    else:
-        button = await update_token(user_id)
-        send_message = await message.reply_text( 
-                                                text=f"👋 Your token has expired. Please get a new token to continue. 🚀",
-                                                reply_markup=button
-                                                )
-        await auto_delete_message(message, send_message)
-        return False
-
-async def update_token(user_id):
-    try:
-        token = str(uuid.uuid4())
-        current_time = tm()
-        new_data = {"token": token, "time": current_time, "status": "unverified", "file_count": 0, "inittime": current_time}
-        await update_user_data(user_id, new_data)
-        user_data[user_id] = {**user_data.get(user_id, {}), **new_data} # Update local cache
-
-        # 1. Create the deep link URL for the bot
-        bot_deep_link = f'https://telegram.dog/{bot_username}?start=token_{token}'
-        
-        # 2. Shorten this deep link using the external URL shortener (shorterner.py)
-        external_shortened_url = await shorten_url(
-            bot_deep_link,
-            base_site=bot_config.get('SHORTERNER_URL'),
-            api_token=bot_config.get('URLSHORTX_API_TOKEN')
-        )
-
-        # 3. Create the link to your Flask app's gate
-        # This will be the URL for the "🎟️ Get Token" button in Telegram
-        request_id = str(uuid.uuid4())
-        await save_shortener_link(request_id, external_shortened_url)
-
-        flask_gate_link = f"{FLASK_APP_BASE_URL}/gate?id={request_id}"
-        
-        button1 = InlineKeyboardButton("🎟️ Get Token", url=flask_gate_link) # Link to your Flask app gate
-        button2 = InlineKeyboardButton("How to get verified ✅", url=f'https://telegram.me/{bot_username}?start=token')
-        button = InlineKeyboardMarkup([[button1], [button2]]) 
-        return button
-    except Exception as e:
-        logger.error(f"error in update_token: {e}")
-        return InlineKeyboardMarkup([[InlineKeyboardButton("Error getting token", callback_data="error_token")]])
-
-async def genrate_token(user_id):
-    try:
-        token = str(uuid.uuid4())
-        current_time = tm()
-        new_data = {"token": token, "time": current_time, "status": "unverified", "file_count": 0, "inittime": current_time}
-        await update_user_data(user_id, new_data)
-        user_data[user_id] = {**user_data.get(user_id, {}), **new_data} # Update local cache
-        
-        bot_deep_link = f'https://telegram.dog/{bot_username}?start=token_{token}'
-        external_shortened_url = await shorten_url(
-            bot_deep_link,
-            base_site=bot_config.get('SHORTERNER_URL'),
-            api_token=bot_config.get('URLSHORTX_API_TOKEN')
-        )
-
-        request_id = str(uuid.uuid4())
-        await save_shortener_link(request_id, external_shortened_url)
-
-        flask_gate_link = f"{FLASK_APP_BASE_URL}/gate?id={request_id}"
-        
-        button1 = InlineKeyboardButton("🎟️ Get Token", url=flask_gate_link)
-        button2 = InlineKeyboardButton("How to get verified ✅", url=f'https://telegram.me/{bot_username}?start=token')
-        button = InlineKeyboardMarkup([[button1], [button2]]) 
-        return button
-    except Exception as e:
-        logger.error(f"error in genrate_token: {e}")
-        return InlineKeyboardMarkup([[InlineKeyboardButton("Error getting token", callback_data="error_token")]])
-
-async def greet_user(message):
-    user_link = await get_user_link(message.from_user)
-
-    greeting_text = (
-        f"Hello {user_link}, 👋\n\n"
-        "Welcome to the official <b>TG⚡️FLIX Bot</b>! 🌟\n\n"
-        "This is your personal delivery bot, where all your requested files will arrive.\n\n"
-        "<b>How to get a file:</b>\n"
-        "1. Browse our main channel.\n"
-        "2. Tap the \"Send in DM\" button on any post.\n"
-        "3. The file will be sent here!\n\n"
-        "<b>Pro Tip:</b> You can always check your verification status and file limit by sending the <code>/me</code> command.\n\n"
-        "Enjoy the show! 🎬"
-    )
-
-    rply = await message.reply_text(
-        text=greeting_text,
-        disable_web_page_preview=True
-        )
-    
-    await auto_delete_message(message, rply)
-
-async def get_user_link(user: User) -> str:
-    try:
-        user_id = user.id if hasattr(user, 'id') else None
-        first_name = user.first_name if hasattr(user, 'first_name') else "Unknown"
-    except Exception as e:
-        logger.info(f"{e}")
-        user_id = None
-        first_name = "Unknown"
-    
-    if user_id:
-        return f'<a href=tg://user?id={user_id}>{first_name}</a>'
-    else:
-        return first_name
-
-async def daily_reset_scheduler():
-    logging.info("Task started: daily_reset_scheduler")
-    global user_data
-    while True:
-        try:
-            # Run reset immediately on startup if needed
-            if await reset_daily_stats_v2():
-                await safe_api_call(lambda: bot.send_message(LOG_CHANNEL_ID, "✅ Daily statistics have been reset successfully."))
-
-            sleep_duration = seconds_until_midnight_ist()
-            logger.info(f"Daily reset scheduled to run in {sleep_duration:.0f} seconds.")
-            await asyncio.sleep(sleep_duration)
-        except Exception as e:
-            logger.error(f"Error in daily_reset_scheduler: {e}")
-            await asyncio.sleep(60)  # Retry after 1 minute if error occurs
-
-async def check_expired_tokens():
-    logging.info("Task started: check_expired_tokens")
-    global user_data
-    while True:
-        try:
-            token_timeout = bot_config.get('TOKEN_TIMEOUT', TOKEN_TIMEOUT)
-            expiry_threshold = tm() - token_timeout
-
-            expired_users = await get_expired_users(expiry_threshold)
-
-            if expired_users:
-                logger.info(f"Found {len(expired_users)} expired tokens. Processing...")
-
-                for user_id in expired_users:
-                    # Update status in DB
-                    await update_user_data(user_id, {'status': 'unverified'})
-
-                    # Update local cache
-                    if user_id in user_data:
-                        user_data[user_id]['status'] = 'unverified'
-
-                    # Notify user
-                    logging.info(f"Attempting to notify user {user_id} of token expiry...")
-                    try:
-                        button = await update_token(user_id)
-                        await safe_api_call(lambda: bot.send_message(
-                            user_id,
-                            "⚠️ <b>Token Expired</b>\n\nYour access has expired. Please get a new token to continue.",
-                            reply_markup=button
-                        ))
-                        logging.info(f"Successfully notified user {user_id}.")
-                    except UserIsBlocked:
-                        logging.info(f"Could not notify user {user_id}: User has blocked the bot.")
-                        pass # User blocked bot
-                    except InputUserDeactivated:
-                        logging.info(f"Could not notify user {user_id}: User account is deactivated.")
-                        pass # User deleted account
-                    except Exception as e:
-                        logger.warning(f"Failed to notify user {user_id} about expiry: {e}")
-                    
-                    await asyncio.sleep(4) # Prevent FloodWait
-
-        except Exception as e:
-            logger.error(f"Error in token expiry check: {e}")
-
-        # Check every 5 minutes
-        await asyncio.sleep(300)
-
-async def prune_inactive_users_scheduler():
-    """A background task that runs once a day to prune inactive users."""
-    while True:
-        try:
-            # Set the inactivity period to 40 days
-            inactive_period_days = 40
-            inactive_threshold = tm() - (inactive_period_days * 24 * 60 * 60)
-
-            # Find and delete inactive users
-            inactive_user_ids = await get_inactive_unverified_users(inactive_threshold)
-
-            if inactive_user_ids:
-                deleted_count = await delete_users_bulk(inactive_user_ids)
-
-                # Log the result
-                summary_message = f"✅ Automated Prune: Removed {deleted_count} inactive unverified users."
-                logging.info(summary_message)
-                await safe_api_call(lambda: bot.send_message(LOG_CHANNEL_ID, summary_message))
-            else:
-                logging.info("Automated Prune: No inactive users found to remove.")
-
-        except Exception as e:
-            error_message = f"Error in prune_inactive_users_scheduler: {e}"
-            logging.error(error_message)
-            await safe_api_call(lambda: bot.send_message(LOG_CHANNEL_ID, error_message))
-
-        # Sleep for 24 hours before the next run
-        await asyncio.sleep(24 * 60 * 60)
 
 async def main():
     await load_initial_data()

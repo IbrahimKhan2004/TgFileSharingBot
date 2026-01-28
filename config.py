@@ -70,6 +70,11 @@ TMDB_API_KEY = os.getenv('TMDB_API_KEY')
 #SHORTERNER API
 URLSHORTX_API_TOKEN = os.getenv('URLSHORTX_API_TOKEN')
 SHORTERNER_URL = os.getenv('SHORTERNER_URL')
+
+# Secondary Shortener (for Limit Extensions)
+URLSHORTX_API_TOKEN_2 = os.getenv('URLSHORTX_API_TOKEN_2', None)
+SHORTERNER_URL_2 = os.getenv('SHORTERNER_URL_2', None)
+
 TOKEN_TIMEOUT = int(os.getenv('TOKEN_TIMEOUT'))
 MINIMUM_DURATION = int(os.getenv('MINIMUM_DURATION', '0')) # Added: Minimum duration for token verification
 

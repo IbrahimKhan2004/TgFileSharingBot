@@ -61,6 +61,7 @@ FLASK_APP_BASE_URL = os.getenv('FLASK_APP_BASE_URL', 'http://127.0.0.1:5000')
 
 #MONGO URI
 MONGO_URI = os.getenv('MONGO_URI')
+MONGO_URI_2 = os.getenv('MONGO_URI_2', None) # Second Database URI
 MONGO_DB_NAME = 'Users'
 
 #TMDB API 

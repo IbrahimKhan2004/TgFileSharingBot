@@ -116,6 +116,21 @@ async def start_command(client, message):
         if len(message.command) > 1:
             command_arg = message.command[1]
             
+            # Handle limit extension help
+            if command_arg == "help_extension":
+                help_text = (
+                    "<b>🚀 Limit Extension System</b>\n\n"
+                    "This feature allows you to continue downloading files even after reaching your daily limit.\n\n"
+                    "<b>How it works:</b>\n"
+                    "1. When you hit the limit, you'll see an 'Extend Limit' button.\n"
+                    "2. Click it to complete a quick verification step.\n"
+                    "3. Once verified, your file count resets to 0, and you can download more files!\n\n"
+                    "<i>Note: You can extend your limit up to 2 times per session.</i>"
+                )
+                reply = await safe_api_call(lambda: message.reply_text(help_text))
+                await auto_delete_message(message, reply)
+                return
+
             # Handle token flow
             if command_arg == "token":
                 tut_id = bot_config.get('TUT_ID', TUT_ID)
@@ -1310,8 +1325,16 @@ async def generate_extension_token_button(user_id):
         udata = user_data.get(user_id)
         token = udata.get('token')
 
+        # Ensure bot_username is available
+        current_bot_username = bot_username or bot.me.username
+        if not current_bot_username:
+             logger.error("Bot username not found in generate_extension_token_button")
+             return InlineKeyboardMarkup([[InlineKeyboardButton("Error: Bot Username Missing", callback_data="error_token")]])
+
         # Deep link with extension prefix
-        bot_deep_link = f'https://telegram.dog/{bot_username}?start=token_ext_{token}'
+        bot_deep_link = f'https://telegram.dog/{current_bot_username}?start=token_ext_{token}'
+
+        logger.info(f"Generating extension link for {user_id}: {bot_deep_link}")
 
         # Shorten using Secondary Shortener
         external_shortened_url = await shorten_url(

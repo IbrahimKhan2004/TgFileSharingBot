@@ -70,6 +70,8 @@ async def load_initial_data():
         'MINIMUM_DURATION': int(db_config.get('MINIMUM_DURATION', MINIMUM_DURATION)),
         'SHORTERNER_URL': db_config.get('SHORTERNER_URL', SHORTERNER_URL),
         'URLSHORTX_API_TOKEN': db_config.get('URLSHORTX_API_TOKEN', URLSHORTX_API_TOKEN),
+        'SHORTERNER_URL_2': db_config.get('SHORTERNER_URL_2', SHORTERNER_URL_2),
+        'URLSHORTX_API_TOKEN_2': db_config.get('URLSHORTX_API_TOKEN_2', URLSHORTX_API_TOKEN_2),
         'TUT_ID': int(db_config.get('TUT_ID', TUT_ID)),
         'DAILY_LIMIT': int(db_config.get('DAILY_LIMIT', DAILY_LIMIT)),
         'TOKEN_TIMEOUT': int(db_config.get('TOKEN_TIMEOUT', TOKEN_TIMEOUT)),
@@ -123,6 +125,60 @@ async def start_command(client, message):
                 await asyncio.sleep(300)
                 await safe_api_call(lambda: sent_msg.delete())
                 return
+
+            # Handle limit extension verification
+            if command_arg.startswith("token_ext_"):
+                input_token = command_arg[10:]
+
+                # Check if user exists
+                udata = user_data.get(user_id)
+                if not udata:
+                     udata = await get_user_data(user_id)
+                     if udata: user_data[user_id] = udata
+
+                if not udata:
+                    reply = await safe_api_call(lambda: message.reply_text("User data not found. Please /start first."))
+                    await auto_delete_message(message, reply)
+                    return
+
+                # Verify token
+                stored_token = udata.get('token')
+                if input_token == stored_token:
+                    # Check Max Extensions
+                    current_stage = udata.get('extension_stage', 0)
+                    if current_stage >= 2:
+                        reply = await safe_api_call(lambda: message.reply_text("You have reached the maximum extension limit for this session. ❌"))
+                        await auto_delete_message(message, reply)
+                        return
+
+                    # Success: Extend Limit
+                    new_stage = current_stage + 1
+
+                    # Update DB (Reset file_count, increment stage, KEEP time)
+                    update_payload = {
+                        'file_count': 0,
+                        'extension_stage': new_stage
+                    }
+                    await update_user_data(user_id, update_payload)
+
+                    # Update local cache
+                    user_data[user_id]['file_count'] = 0
+                    user_data[user_id]['extension_stage'] = new_stage
+
+                    success_msg = (
+                        f"<b>Limit Extended! 🚀</b>\n\n"
+                        f"You have successfully extended your daily limit.\n"
+                        f"<b>Extension Stage:</b> {new_stage}/2\n"
+                        f"<b>Files Reset:</b> 0/{bot_config.get('DAILY_LIMIT', DAILY_LIMIT)}"
+                    )
+                    reply = await safe_api_call(lambda: message.reply_text(success_msg))
+                    await safe_api_call(lambda: bot.send_message(LOG_CHANNEL_ID, f"User {user_link} extended limit to stage {new_stage}. ✅"))
+                    await auto_delete_message(message, reply)
+                    return
+                else:
+                    reply = await safe_api_call(lambda: message.reply_text("Invalid or expired extension link. ❌"))
+                    await auto_delete_message(message, reply)
+                    return
 
             # Handle token verification
             if command_arg.startswith("token_"):
@@ -631,6 +687,8 @@ async def settings_command(client, message):
         [InlineKeyboardButton(f"Min Duration: {bot_config.get('MINIMUM_DURATION')}s", callback_data="set_duration")],
         [InlineKeyboardButton(f"Shortener URL: {bot_config.get('SHORTERNER_URL')}", callback_data="set_shortener")],
         [InlineKeyboardButton(f"API Token: {bot_config.get('URLSHORTX_API_TOKEN')}", callback_data="set_api_token")],
+        [InlineKeyboardButton(f"Shortener 2: {bot_config.get('SHORTERNER_URL_2', 'Not Set')}", callback_data="set_shortener_2")],
+        [InlineKeyboardButton(f"API Token 2: {bot_config.get('URLSHORTX_API_TOKEN_2', 'Not Set')}", callback_data="set_api_token_2")],
         [InlineKeyboardButton(f"Tutorial ID: {bot_config.get('TUT_ID')}", callback_data="set_tut_id")],
         [InlineKeyboardButton(f"Daily Limit: {bot_config.get('DAILY_LIMIT')}", callback_data="set_daily_limit")],
         [InlineKeyboardButton(f"Token Timeout: {bot_config.get('TOKEN_TIMEOUT')}s", callback_data="set_token_timeout")],
@@ -651,6 +709,10 @@ async def settings_callback(client, callback_query):
         prompt = "Send new <b>Shortener URL</b> (domain):"
     elif action == "set_api_token":
         prompt = "Send new <b>API Token</b>:"
+    elif action == "set_shortener_2":
+        prompt = "Send new <b>Secondary Shortener URL</b> (domain):"
+    elif action == "set_api_token_2":
+        prompt = "Send new <b>Secondary API Token</b>:"
     elif action == "set_tut_id":
         prompt = "Send new <b>Tutorial Message ID</b>:"
     elif action == "set_daily_limit":
@@ -694,6 +756,10 @@ async def settings_callback(client, callback_query):
             key = 'SHORTERNER_URL'
         elif action == "set_api_token":
             key = 'URLSHORTX_API_TOKEN'
+        elif action == "set_shortener_2":
+            key = 'SHORTERNER_URL_2'
+        elif action == "set_api_token_2":
+            key = 'URLSHORTX_API_TOKEN_2'
         elif action == "set_tut_id":
              if new_value.isdigit():
                 key = 'TUT_ID'
@@ -935,7 +1001,8 @@ async def process_message(client, message):
                 f"<b>⚠️ Duplicate File Removed</b>\n\n"
                 f"<b>Caption:</b> {caption}\n"
                 f"<b>File Name:</b> <code>{file_name}</code>\n"
-                f"<b>File ID:</b> <code>{file_unique_id}</code>\n"
+                f"<b>New File ID:</b> <code>{file_unique_id}</code>\n"
+                f"<b>Blocking ID (In DB):</b> <code>{duplicate_doc['_id']}</code>\n"
                 f"<b>Match Reason:</b> <code>{match_reason}</code>\n"
                 f"<b>Status:</b> Skipped Download 🚀"
             )
@@ -1009,7 +1076,8 @@ async def process_message(client, message):
                     f"<b>⚠️ Duplicate File Removed</b>\n\n"
                     f"<b>Caption:</b> {caption}\n"
                     f"<b>File Name:</b> <code>{file_name}</code>\n"
-                    f"<b>File ID:</b> <code>{file_unique_id}</code>\n"
+                    f"<b>New File ID:</b> <code>{file_unique_id}</code>\n"
+                    f"<b>Blocking ID (In DB):</b> <code>{duplicate_doc['_id']}</code>\n"
                     f"<b>Match Reason:</b> <code>{match_reason}</code>\n"
                     f"<b>Hash (Start):</b> <code>{content_hash or 'N/A'}</code>"
                 )
@@ -1204,9 +1272,26 @@ async def check_access(message, user_id):
         if file_count < daily_limit:
             return True
         else:
-            reply = await message.reply_text(f"You have reached the daily limit. Please wait until the token expires.")
-            await auto_delete_message(message, reply)
-            return False
+            # Limit Reached Logic
+            extension_stage = udata.get('extension_stage', 0)
+
+            # Check if extension is possible (Stage < 2 and Secondary Shortener Configured)
+            shortener_url_2 = bot_config.get('SHORTERNER_URL_2')
+            if extension_stage < 2 and shortener_url_2:
+                button = await generate_extension_token_button(user_id)
+                warning_msg = (
+                    f"⚠️ <b>Daily Limit Reached!</b> ({daily_limit}/{daily_limit})\n\n"
+                    f"You have used your daily file quota.\n"
+                    f"But don't worry! You can extend your limit for free.\n\n"
+                    f"<b>Current Extension:</b> {extension_stage}/2"
+                )
+                reply = await message.reply_text(warning_msg, reply_markup=button)
+                await auto_delete_message(message, reply)
+                return False
+            else:
+                reply = await message.reply_text(f"You have reached the daily limit. Please wait until the token expires.")
+                await auto_delete_message(message, reply)
+                return False
     else:
         button = await update_token(user_id)
         send_message = await message.reply_text( 
@@ -1216,11 +1301,51 @@ async def check_access(message, user_id):
         await auto_delete_message(message, send_message)
         return False
 
+async def generate_extension_token_button(user_id):
+    """Generates a button for limit extension using the secondary shortener."""
+    try:
+        # We reuse the existing token or generate a specific one.
+        # Logic: We use the existing token but prefix it in the deep link.
+        # Actually, simpler to just use the stored token.
+        udata = user_data.get(user_id)
+        token = udata.get('token')
+
+        # Deep link with extension prefix
+        bot_deep_link = f'https://telegram.dog/{bot_username}?start=token_ext_{token}'
+
+        # Shorten using Secondary Shortener
+        external_shortened_url = await shorten_url(
+            bot_deep_link,
+            base_site=bot_config.get('SHORTERNER_URL_2'),
+            api_token=bot_config.get('URLSHORTX_API_TOKEN_2')
+        )
+
+        request_id = str(uuid.uuid4())
+        await save_shortener_link(request_id, external_shortened_url)
+
+        flask_gate_link = f"{FLASK_APP_BASE_URL}/gate?id={request_id}"
+
+        button = InlineKeyboardMarkup([
+            [InlineKeyboardButton("🚀 Extend Limit", url=flask_gate_link)],
+            [InlineKeyboardButton("What is this?", url=f'https://telegram.me/{bot_username}?start=help_extension')]
+        ])
+        return button
+    except Exception as e:
+        logger.error(f"error in generate_extension_token_button: {e}")
+        return InlineKeyboardMarkup([[InlineKeyboardButton("Error generating link", callback_data="error_token")]])
+
 async def update_token(user_id):
     try:
         token = str(uuid.uuid4())
         current_time = tm()
-        new_data = {"token": token, "time": current_time, "status": "unverified", "file_count": 0, "inittime": current_time}
+        new_data = {
+            "token": token,
+            "time": current_time,
+            "status": "unverified",
+            "file_count": 0,
+            "extension_stage": 0,
+            "inittime": current_time
+        }
         await update_user_data(user_id, new_data)
         user_data[user_id] = {**user_data.get(user_id, {}), **new_data} # Update local cache
 
@@ -1253,7 +1378,14 @@ async def genrate_token(user_id):
     try:
         token = str(uuid.uuid4())
         current_time = tm()
-        new_data = {"token": token, "time": current_time, "status": "unverified", "file_count": 0, "inittime": current_time}
+        new_data = {
+            "token": token,
+            "time": current_time,
+            "status": "unverified",
+            "file_count": 0,
+            "extension_stage": 0,
+            "inittime": current_time
+        }
         await update_user_data(user_id, new_data)
         user_data[user_id] = {**user_data.get(user_id, {}), **new_data} # Update local cache
         
@@ -1344,11 +1476,14 @@ async def check_expired_tokens():
 
                 for user_id in expired_users:
                     # Update status in DB
-                    await update_user_data(user_id, {'status': 'unverified'})
+                    # Reset extension_stage as well
+                    await update_user_data(user_id, {'status': 'unverified', 'extension_stage': 0, 'file_count': 0})
 
                     # Update local cache
                     if user_id in user_data:
                         user_data[user_id]['status'] = 'unverified'
+                        user_data[user_id]['extension_stage'] = 0
+                        user_data[user_id]['file_count'] = 0
 
                     # Notify user
                     logging.info(f"Attempting to notify user {user_id} of token expiry...")

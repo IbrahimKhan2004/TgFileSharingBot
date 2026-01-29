@@ -237,6 +237,7 @@ async def add_user(user_id: int):
         'time': 0,
         'status': 'unverified',
         'file_count': 0,
+        'extension_stage': 0,
         'inittime': 0
     }
 
@@ -257,7 +258,7 @@ async def add_user(user_id: int):
 
 async def update_user_data(user_id: int, data: dict):
     """Updates the user's data document. checks where user exists and updates there."""
-    valid_fields = ['token', 'time', 'status', 'file_count', 'inittime', 'bypass_attempts']
+    valid_fields = ['token', 'time', 'status', 'file_count', 'extension_stage', 'inittime', 'bypass_attempts']
     update_doc = {k: v for k, v in data.items() if k in valid_fields}
     if not update_doc: return
 
@@ -295,6 +296,7 @@ async def get_user_data(user_id: int):
             'time': user.get('time', 0),
             'status': user.get('status', 'unverified'),
             'file_count': user.get('file_count', 0),
+            'extension_stage': user.get('extension_stage', 0),
             'inittime': user.get('inittime', 0),
             'bypass_attempts': user.get('bypass_attempts', 0)
         }
@@ -324,6 +326,7 @@ async def load_all_user_data():
             'time': user.get('time', 0),
             'status': user.get('status', 'unverified'),
             'file_count': user.get('file_count', 0),
+            'extension_stage': user.get('extension_stage', 0),
             'inittime': user.get('inittime', 0),
             'bypass_attempts': user.get('bypass_attempts', 0)
         }
@@ -336,6 +339,7 @@ async def load_all_user_data():
                 'time': user.get('time', 0),
                 'status': user.get('status', 'unverified'),
                 'file_count': user.get('file_count', 0),
+                'extension_stage': user.get('extension_stage', 0),
                 'inittime': user.get('inittime', 0),
                 'bypass_attempts': user.get('bypass_attempts', 0)
             }

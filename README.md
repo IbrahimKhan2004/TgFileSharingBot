@@ -124,6 +124,8 @@ Create a `config.env` file in the root directory or set these environment variab
 | `TMDB_API_KEY`        | API key for The Movie Database (TMDB) to fetch movie/show posters. Optional, but recommended.              | `your_tmdb_api_key`                |
 | `URLSHORTX_API_TOKEN` | API token for your chosen URL shortener service (compatible with urlshortx.com API format).                | `your_shortener_api_token`         |
 | `SHORTERNER_URL`      | Base domain of your URL shortener service (e.g., `urlshortx.com` or your self-hosted instance).            | `urlshortx.com`                    |
+| `SHORTERNER_URL_2`    | (Optional) Secondary Shortener URL for Limit Extension feature.                                            | `another-shortener.com`            |
+| `URLSHORTX_API_TOKEN_2`| (Optional) API Token for the secondary shortener.                                                         | `token_for_second_shortener`       |
 | `TOKEN_TIMEOUT`       | Duration in seconds for how long a verified token remains valid. (8 hours = 28800)                         | `28800`                            |
 | `DAILY_LIMIT`         | Maximum number of files a user can download per token validity period.                                     | `10`                               |
 | `FORCE_SUB_CHANNEL`   | (Optional) Channel ID or Link that users must join to use the bot.                                         | `-100xxxx` or `https://t.me/xxxx`  |

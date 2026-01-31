@@ -1015,7 +1015,8 @@ async def manage_user_channel_callback(client, callback_query):
                 logger.error(f"Error verifying user channel: {e}")
                 await msg.edit_text(f"❌ <b>Error:</b> Could not verify channel. Make sure the ID/Username is correct and the bot is an Admin.\n\nDebug: {e}")
 
-        except asyncio.TimeoutError:
+        except Exception:
+            # Catch all (including pyromod ListenerTimeout)
             await msg.delete()
 
 @bot.on_callback_query(filters.regex("^remove_user_channel"))

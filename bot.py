@@ -76,7 +76,8 @@ async def load_initial_data():
         'DAILY_LIMIT': int(db_config.get('DAILY_LIMIT', DAILY_LIMIT)),
         'TOKEN_TIMEOUT': int(db_config.get('TOKEN_TIMEOUT', TOKEN_TIMEOUT)),
         'FORCE_SUB_CHANNEL': clean_force_sub_url(db_config.get('FORCE_SUB_CHANNEL', FORCE_SUB_CHANNEL)),
-        'AUTO_DELETE_TIME': int(db_config.get('AUTO_DELETE_TIME', AUTO_DELETE_TIME))
+        'AUTO_DELETE_TIME': int(db_config.get('AUTO_DELETE_TIME', AUTO_DELETE_TIME)),
+        'PROTECT_CONTENT': str(db_config.get('PROTECT_CONTENT', PROTECT_CONTENT)).lower() in ('true', '1', 't')
     }
 
     logger.info("Successfully loaded all user data and dynamic config from the database.")
@@ -283,7 +284,15 @@ async def start_command(client, message):
                 caption = await remove_extension(file_message.caption.html or "")
                 auto_delete_time = bot_config.get('AUTO_DELETE_TIME', 60)
                 warning = f"\n\n<b>⚠️ This file will be deleted in {auto_delete_time} seconds!</b>"
-                copy_message = await safe_api_call(lambda: file_message.copy(chat_id=message.chat.id, caption=f"<b>{caption}</b>{warning}", parse_mode=enums.ParseMode.HTML))
+
+                protect_content = bot_config.get('PROTECT_CONTENT', False)
+
+                copy_message = await safe_api_call(lambda: file_message.copy(
+                    chat_id=message.chat.id,
+                    caption=f"<b>{caption}</b>{warning}",
+                    parse_mode=enums.ParseMode.HTML,
+                    protect_content=protect_content
+                ))
                 await increment_file_count(user_id)
                 await increment_files_shared_today() # New line to track daily file shares
                 user_data[user_id]['file_count'] += 1
@@ -709,6 +718,7 @@ async def settings_command(client, message):
         [InlineKeyboardButton(f"Token Timeout: {bot_config.get('TOKEN_TIMEOUT')}s", callback_data="set_token_timeout")],
         [InlineKeyboardButton(f"Force Sub: {bot_config.get('FORCE_SUB_CHANNEL', 'Not Set')}", callback_data="set_force_sub")],
         [InlineKeyboardButton(f"Auto Delete: {bot_config.get('AUTO_DELETE_TIME')}s", callback_data="set_auto_delete")],
+        [InlineKeyboardButton(f"Protect Content: {bot_config.get('PROTECT_CONTENT', False)}", callback_data="set_protect_content")],
         [InlineKeyboardButton("🔄 Restart Bot", callback_data="restart_bot")],
         [InlineKeyboardButton("❌ Close", callback_data="close_settings")]
     ]
@@ -738,6 +748,8 @@ async def settings_callback(client, callback_query):
         prompt = "Send new <b>Force Sub Channel</b> (ID or Username/Link). Send '0' or 'None' to disable:"
     elif action == "set_auto_delete":
         prompt = "Send new <b>Auto Delete Time</b> (in seconds):"
+    elif action == "set_protect_content":
+        prompt = "Send True/False to Enable/Disable <b>Content Protection</b>:"
     else:
         return
 
@@ -809,6 +821,15 @@ async def settings_callback(client, callback_query):
             else:
                  await callback_query.message.reply_text("Invalid number.")
                  return
+        elif action == "set_protect_content":
+            if new_value.lower() in ('true', '1', 't'):
+                new_value = True
+            elif new_value.lower() in ('false', '0', 'f'):
+                new_value = False
+            else:
+                await callback_query.message.reply_text("Invalid input. Send True or False.")
+                return
+            key = 'PROTECT_CONTENT'
 
         if key:
             await update_dynamic_config(key, new_value)

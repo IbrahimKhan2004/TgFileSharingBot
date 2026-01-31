@@ -937,10 +937,13 @@ async def manage_user_channel_callback(client, callback_query):
         # Background task for countdown
         async def countdown_timer(message, timeout):
             try:
-                for remaining in range(timeout - 10, 0, -10):
-                    await asyncio.sleep(10)
+                for remaining in range(timeout - 5, -1, -5):
+                    await asyncio.sleep(5)
                     try:
-                        await message.edit_text(f"{text}\n\n⏳ <b>Timeout in: {remaining}s</b>")
+                        if remaining == 0:
+                             await message.edit_text(f"{text}\n\n⏳ <b>Timeout!</b>")
+                        else:
+                             await message.edit_text(f"{text}\n\n⏳ <b>Timeout in: {remaining}s</b>")
                     except Exception:
                         break # Message deleted or processed
             except asyncio.CancelledError:
@@ -949,8 +952,11 @@ async def manage_user_channel_callback(client, callback_query):
         timer_task = asyncio.create_task(countdown_timer(msg, timeout_seconds))
 
         try:
-            # Listener logic
-            user_response = await client.listen(chat_id=callback_query.message.chat.id, user_id=user_id, timeout=timeout_seconds)
+            # Listener logic with safety wrapper
+            user_response = await asyncio.wait_for(
+                client.listen(chat_id=callback_query.message.chat.id, user_id=user_id, timeout=timeout_seconds),
+                timeout=timeout_seconds + 5
+            )
             timer_task.cancel() # Stop timer if user replies
 
             # Check for text cancel first
@@ -1017,9 +1023,13 @@ async def manage_user_channel_callback(client, callback_query):
                 logger.error(f"Error verifying user channel: {e}")
                 await msg.edit_text(f"❌ <b>Error:</b> Could not verify channel. Make sure the ID/Username is correct and the bot is an Admin.\n\nDebug: {e}")
 
-        except Exception:
-            # Catch all (including pyromod ListenerTimeout)
-            await msg.delete()
+        except Exception as e:
+            # Catch all (including asyncio.TimeoutError and pyromod ListenerTimeout)
+            logger.warning(f"Set Channel Timeout/Error: {e}")
+            try:
+                await msg.delete()
+            except:
+                pass
 
 @bot.on_callback_query(filters.regex("^remove_user_channel"))
 async def remove_user_channel_callback(client, callback_query):

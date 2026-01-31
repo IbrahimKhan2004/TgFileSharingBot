@@ -349,7 +349,8 @@ async def start_command(client, message):
                     except Exception as e:
                         logger.warning(f"Failed to send file limit warning to user {user_id}: {e}")
 
-                await auto_delete_message(message, copy_message, auto_delete_time)
+                if target_chat_id == message.chat.id:
+                    await auto_delete_message(message, copy_message, auto_delete_time)
             else:
                 await auto_delete_message(message, await message.reply_text("File not found or inaccessible."))
             return

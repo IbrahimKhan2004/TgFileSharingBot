@@ -258,7 +258,20 @@ async def add_user(user_id: int):
 
 async def update_user_data(user_id: int, data: dict):
     """Updates the user's data document. checks where user exists and updates there."""
-    valid_fields = ['token', 'time', 'status', 'file_count', 'extension_stage', 'inittime', 'bypass_attempts']
+    # Added user_channel_id and user_channel_name to valid fields
+    valid_fields = ['token', 'time', 'status', 'file_count', 'extension_stage', 'inittime', 'bypass_attempts', 'user_channel_id', 'user_channel_name']
+
+    # Handle $unset operations if passed in data (keys starting with $)
+    # If data contains MongoDB operators (like $unset), pass them directly
+    if any(k.startswith('$') for k in data.keys()):
+        # Try Update DB 1
+        res = await user_data.update_one({'_id': user_id}, data)
+
+        # If not found in DB 1, try DB 2
+        if res.matched_count == 0 and user_data_2 is not None:
+             await user_data_2.update_one({'_id': user_id}, data)
+        return
+
     update_doc = {k: v for k, v in data.items() if k in valid_fields}
     if not update_doc: return
 
@@ -298,7 +311,9 @@ async def get_user_data(user_id: int):
             'file_count': user.get('file_count', 0),
             'extension_stage': user.get('extension_stage', 0),
             'inittime': user.get('inittime', 0),
-            'bypass_attempts': user.get('bypass_attempts', 0)
+            'bypass_attempts': user.get('bypass_attempts', 0),
+            'user_channel_id': user.get('user_channel_id'),
+            'user_channel_name': user.get('user_channel_name')
         }
     return None
 

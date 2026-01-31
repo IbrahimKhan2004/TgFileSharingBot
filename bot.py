@@ -928,15 +928,32 @@ async def manage_user_channel_callback(client, callback_query):
             "Once linked, all your requested files will be sent directly to your channel! 📂\n\n"
             "<i>Send 'cancel' to stop.</i>"
         )
-        await callback_query.message.edit_text(text)
+        # Initial Message with Timer
+        timeout_seconds = 60
+        msg = await callback_query.message.edit_text(f"{text}\n\n⏳ <b>Timeout in: {timeout_seconds}s</b>")
+
+        # Background task for countdown
+        async def countdown_timer(message, timeout):
+            try:
+                for remaining in range(timeout - 10, 0, -10):
+                    await asyncio.sleep(10)
+                    try:
+                        await message.edit_text(f"{text}\n\n⏳ <b>Timeout in: {remaining}s</b>")
+                    except Exception:
+                        break # Message deleted or processed
+            except asyncio.CancelledError:
+                pass
+
+        timer_task = asyncio.create_task(countdown_timer(msg, timeout_seconds))
 
         try:
-            # Simple listener logic
-            user_response = await client.listen(chat_id=callback_query.message.chat.id, user_id=user_id, timeout=60)
+            # Listener logic
+            user_response = await client.listen(chat_id=callback_query.message.chat.id, user_id=user_id, timeout=timeout_seconds)
+            timer_task.cancel() # Stop timer if user replies
 
             # Check for text cancel first
             if user_response.text and user_response.text.lower() == 'cancel':
-                await callback_query.message.delete()
+                await msg.delete()
                 await user_response.delete()
                 return
 
@@ -946,8 +963,16 @@ async def manage_user_channel_callback(client, callback_query):
             if user_response.forward_from_chat:
                 channel_input = user_response.forward_from_chat.id
             elif user_response.text:
-                 channel_input = clean_force_sub_url(user_response.text.strip())
+                 text_input = user_response.text.strip()
+                 # Strict Validation: Must start with -100 (ID) or @ (Username)
+                 if text_input.startswith("-100") or text_input.startswith("@"):
+                     channel_input = clean_force_sub_url(text_input)
+                 else:
+                     await msg.delete()
+                     await user_response.reply_text("❌ <b>Invalid format!</b>\n\nPlease send a valid Channel ID (starting with <code>-100</code>) or Username (starting with <code>@</code>).\n\n<i>Try again.</i>")
+                     return
             else:
+                 await msg.delete()
                  await callback_query.message.reply_text("❌ Invalid input. Please send Channel ID, Username, or Forward a message from the channel.")
                  return
 
@@ -970,7 +995,7 @@ async def manage_user_channel_callback(client, callback_query):
                      else:
                          user_data[user_id] = await get_user_data(user_id)
 
-                     await callback_query.message.delete()
+                     await msg.delete()
                      success_msg = await user_response.reply_text(f"✅ Channel <b>{chat.title}</b> linked successfully!")
 
                      # Log it
@@ -984,14 +1009,14 @@ async def manage_user_channel_callback(client, callback_query):
                      await success_msg.delete()
                      await user_response.delete()
                 else:
-                    await callback_query.message.edit_text("❌ <b>Error:</b> Bot is not an Admin in that channel. Please add me as Admin and try again.")
+                    await msg.edit_text("❌ <b>Error:</b> Bot is not an Admin in that channel. Please add me as Admin and try again.")
 
             except Exception as e:
                 logger.error(f"Error verifying user channel: {e}")
-                await callback_query.message.edit_text(f"❌ <b>Error:</b> Could not verify channel. Make sure the ID/Username is correct and the bot is an Admin.\n\nDebug: {e}")
+                await msg.edit_text(f"❌ <b>Error:</b> Could not verify channel. Make sure the ID/Username is correct and the bot is an Admin.\n\nDebug: {e}")
 
         except asyncio.TimeoutError:
-            await callback_query.message.edit_text("❌ Timed out.")
+            await msg.delete()
 
 @bot.on_callback_query(filters.regex("^remove_user_channel"))
 async def remove_user_channel_callback(client, callback_query):

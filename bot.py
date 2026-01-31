@@ -282,20 +282,54 @@ async def start_command(client, message):
             media = file_message.video or file_message.audio or file_message.document
             if media:
                 caption = await remove_extension(file_message.caption.html or "")
-                auto_delete_time = bot_config.get('AUTO_DELETE_TIME', 60)
-                warning = f"\n\n<b>⚠️ This file will be deleted in {auto_delete_time} seconds!</b>"
 
+                # Check for User Target Channel
+                target_chat_id = message.chat.id
                 protect_content = bot_config.get('PROTECT_CONTENT', False)
+                auto_delete_time = bot_config.get('AUTO_DELETE_TIME', 60)
 
-                copy_message = await safe_api_call(lambda: file_message.copy(
-                    chat_id=message.chat.id,
-                    caption=f"<b>{caption}</b>{warning}",
-                    parse_mode=enums.ParseMode.HTML,
-                    protect_content=protect_content
-                ))
+                user_channel_id = user_data.get(user_id, {}).get('user_channel_id')
+                if user_channel_id:
+                    try:
+                        # Validate if bot is still admin/member of that channel
+                        # Optimistically assume yes to save API calls, catch error if not
+                        target_chat_id = user_channel_id
+                        protect_content = False # No restriction for user's own channel
+                        warning = "" # No auto-delete warning needed for personal channel usually
+                    except Exception:
+                         # Fallback to DM if channel is invalid/inaccessible
+                         target_chat_id = message.chat.id
+
+                if target_chat_id == message.chat.id:
+                    warning = f"\n\n<b>⚠️ This file will be deleted in {auto_delete_time} seconds!</b>"
+
+                try:
+                    copy_message = await safe_api_call(lambda: file_message.copy(
+                        chat_id=target_chat_id,
+                        caption=f"<b>{caption}</b>{warning}",
+                        parse_mode=enums.ParseMode.HTML,
+                        protect_content=protect_content
+                    ))
+                except Exception as e:
+                     # Fallback to DM if channel delivery fails (e.g. bot removed from channel)
+                     logger.warning(f"Failed to send to user channel {user_channel_id}: {e}. Falling back to DM.")
+                     target_chat_id = message.chat.id
+                     protect_content = bot_config.get('PROTECT_CONTENT', False)
+                     warning = f"\n\n<b>⚠️ This file will be deleted in {auto_delete_time} seconds!</b>"
+                     copy_message = await safe_api_call(lambda: file_message.copy(
+                        chat_id=target_chat_id,
+                        caption=f"<b>{caption}</b>{warning}",
+                        parse_mode=enums.ParseMode.HTML,
+                        protect_content=protect_content
+                    ))
+
                 await increment_file_count(user_id)
                 await increment_files_shared_today() # New line to track daily file shares
                 user_data[user_id]['file_count'] += 1
+
+                # Notify user in DM if sent to channel
+                if target_chat_id != message.chat.id:
+                     await safe_api_call(lambda: message.reply_text(f"✅ File sent to your channel: <b>{user_data[user_id].get('user_channel_name')}</b>", parse_mode=enums.ParseMode.HTML))
 
                 # File Limit Warning Logic
                 daily_limit = bot_config.get('DAILY_LIMIT', DAILY_LIMIT)
@@ -671,7 +705,10 @@ async def my_status(client, message):
         f"📂 <b>Daily Limit:</b> {file_count}/{daily_limit}"
     )
 
-    await message.reply_text(response)
+    # Add Target Channel Button
+    buttons = [[InlineKeyboardButton("📢 Target Channel", callback_data="manage_user_channel")]]
+
+    await message.reply_text(response, reply_markup=InlineKeyboardMarkup(buttons))
 
 @bot.on_message(filters.command("dbstats") & filters.user(OWNER_ID))
 async def db_stats_command(client, message):
@@ -852,6 +889,123 @@ async def restart_callback(client, callback_query):
 @bot.on_callback_query(filters.regex("^close_settings"))
 async def close_settings_callback(client, callback_query):
     await callback_query.message.delete()
+
+@bot.on_callback_query(filters.regex("^manage_user_channel"))
+async def manage_user_channel_callback(client, callback_query):
+    user_id = callback_query.from_user.id
+    udata = user_data.get(user_id)
+
+    if not udata:
+         udata = await get_user_data(user_id)
+         if udata: user_data[user_id] = udata
+
+    current_channel_id = udata.get('user_channel_id')
+    current_channel_name = udata.get('user_channel_name', 'Unknown')
+
+    if current_channel_id:
+        text = (
+            f"📢 <b>Your Target Channel</b>\n\n"
+            f"<b>Name:</b> {current_channel_name}\n"
+            f"<b>ID:</b> <code>{current_channel_id}</code>\n\n"
+            f"Files will be sent directly to this channel. ✅"
+        )
+        buttons = [
+            [InlineKeyboardButton("❌ Remove Channel", callback_data="remove_user_channel")],
+            [InlineKeyboardButton("🔙 Back", callback_data="close_settings")] # Reusing close for now, or could act as back
+        ]
+        await callback_query.message.edit_text(text, reply_markup=InlineKeyboardMarkup(buttons))
+    else:
+        text = (
+            "📢 <b>Set Target Channel</b>\n\n"
+            "Link your personal channel to receive files directly! 🚀\n"
+            "This bypasses forward restrictions and keeps files safe.\n\n"
+            "<b>📋 How to Setup:</b>\n"
+            "1️⃣ <b>Create a Channel</b> (Private or Public).\n"
+            "2️⃣ <b>Add this Bot</b> as an Administrator to that channel.\n"
+            "   <i>(Make sure it has 'Post Messages' permission)</i>\n"
+            "3️⃣ <b>Send the Channel ID</b> or <b>Username</b> (e.g., @mychannel) here.\n"
+            "   <i>(Or just forward a message from that channel to me)</i>\n\n"
+            "Once linked, all your requested files will be sent directly to your channel! 📂\n\n"
+            "<i>Send 'cancel' to stop.</i>"
+        )
+        await callback_query.message.edit_text(text)
+
+        try:
+            # Simple listener logic
+            user_response = await client.listen(chat_id=callback_query.message.chat.id, user_id=user_id, timeout=60)
+
+            # Check for text cancel first
+            if user_response.text and user_response.text.lower() == 'cancel':
+                await callback_query.message.delete()
+                await user_response.delete()
+                return
+
+            channel_input = None
+
+            # Logic to handle Forwarded Message OR Text Input
+            if user_response.forward_from_chat:
+                channel_input = user_response.forward_from_chat.id
+            elif user_response.text:
+                 channel_input = clean_force_sub_url(user_response.text.strip())
+            else:
+                 await callback_query.message.reply_text("❌ Invalid input. Please send Channel ID, Username, or Forward a message from the channel.")
+                 return
+
+            # Verify Channel
+            try:
+                chat = await client.get_chat(channel_input)
+                member = await client.get_chat_member(chat.id, client.me.id)
+
+                if member.status == enums.ChatMemberStatus.ADMINISTRATOR:
+                     # Success
+                     update_payload = {
+                         'user_channel_id': chat.id,
+                         'user_channel_name': chat.title
+                     }
+                     await update_user_data(user_id, update_payload)
+
+                     # Update local cache
+                     if user_id in user_data:
+                         user_data[user_id].update(update_payload)
+                     else:
+                         user_data[user_id] = await get_user_data(user_id)
+
+                     await callback_query.message.delete()
+                     success_msg = await user_response.reply_text(f"✅ Channel <b>{chat.title}</b> linked successfully!")
+
+                     # Log it
+                     user_link = await get_user_link(callback_query.from_user)
+                     await safe_api_call(lambda: bot.send_message(
+                         LOG_CHANNEL_ID,
+                         f"User {user_link} linked channel <b>{chat.title}</b> (<code>{chat.id}</code>) for direct delivery. ✅",
+                         parse_mode=enums.ParseMode.HTML
+                     ))
+                     await asyncio.sleep(5)
+                     await success_msg.delete()
+                     await user_response.delete()
+                else:
+                    await callback_query.message.edit_text("❌ <b>Error:</b> Bot is not an Admin in that channel. Please add me as Admin and try again.")
+
+            except Exception as e:
+                logger.error(f"Error verifying user channel: {e}")
+                await callback_query.message.edit_text(f"❌ <b>Error:</b> Could not verify channel. Make sure the ID/Username is correct and the bot is an Admin.\n\nDebug: {e}")
+
+        except asyncio.TimeoutError:
+            await callback_query.message.edit_text("❌ Timed out.")
+
+@bot.on_callback_query(filters.regex("^remove_user_channel"))
+async def remove_user_channel_callback(client, callback_query):
+    user_id = callback_query.from_user.id
+
+    # Remove from DB using $unset
+    await update_user_data(user_id, {'$unset': {'user_channel_id': "", 'user_channel_name': ""}})
+
+    # Update local cache
+    if user_id in user_data:
+        user_data[user_id].pop('user_channel_id', None)
+        user_data[user_id].pop('user_channel_name', None)
+
+    await callback_query.message.edit_text("✅ Channel removed. Files will be sent to your DM.")
 
 
 @bot.on_message(filters.private & filters.command("verify") & filters.user(OWNER_ID))

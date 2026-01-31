@@ -979,9 +979,13 @@ async def process_queue():
         message = await message_queue.get()  
         if message is None:  
             break
-        await process_message(bot, message) 
-        await asyncio.sleep(6) # Throttle processing to prevent floods
-        message_queue.task_done()
+        try:
+            await process_message(bot, message)
+        except Exception as e:
+            logger.error(f"Error in process_queue: {e}", exc_info=True)
+        finally:
+            await asyncio.sleep(6) # Throttle processing to prevent floods
+            message_queue.task_done()
 
 async def process_message(client, message):
 
@@ -1022,7 +1026,7 @@ async def process_message(client, message):
                 f"<b>Status:</b> Skipped Download 🚀"
             )
             await bot.send_message(LOG_CHANNEL_ID, log_msg)
-            await message.delete()
+            await safe_api_call(lambda: message.delete())
             return
 
         if message.video or message.document:
@@ -1097,7 +1101,7 @@ async def process_message(client, message):
                     f"<b>Hash (Start):</b> <code>{content_hash or 'N/A'}</code>"
                 )
                 await bot.send_message(LOG_CHANNEL_ID, log_msg)
-                await message.delete()
+                await safe_api_call(lambda: message.delete())
                 return
 
         await add_processed_file(file_unique_id, caption, content_hash, hash_middle, hash_end, file_size, file_name, duration_raw)

@@ -1035,6 +1035,14 @@ async def manage_user_channel_callback(client, callback_query):
 async def remove_user_channel_callback(client, callback_query):
     user_id = callback_query.from_user.id
 
+    # Retrieve info before deletion for logging
+    udata = user_data.get(user_id)
+    if not udata:
+         udata = await get_user_data(user_id)
+
+    channel_name = udata.get('user_channel_name', 'Unknown') if udata else 'Unknown'
+    channel_id = udata.get('user_channel_id', 'Unknown') if udata else 'Unknown'
+
     # Remove from DB using $unset
     await update_user_data(user_id, {'$unset': {'user_channel_id': "", 'user_channel_name': ""}})
 
@@ -1044,6 +1052,14 @@ async def remove_user_channel_callback(client, callback_query):
         user_data[user_id].pop('user_channel_name', None)
 
     await callback_query.message.edit_text("✅ Channel removed. Files will be sent to your DM.")
+
+    # Log the removal
+    user_link = await get_user_link(callback_query.from_user)
+    await safe_api_call(lambda: bot.send_message(
+        LOG_CHANNEL_ID,
+        f"User {user_link} removed linked channel <b>{channel_name}</b> (<code>{channel_id}</code>). ❌",
+        parse_mode=enums.ParseMode.HTML
+    ))
 
 
 @bot.on_message(filters.private & filters.command("verify") & filters.user(OWNER_ID))

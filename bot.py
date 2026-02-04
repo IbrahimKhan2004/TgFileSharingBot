@@ -1213,7 +1213,7 @@ async def process_queue():
         except Exception as e:
             logger.error(f"Error in process_queue: {e}", exc_info=True)
         finally:
-            await asyncio.sleep(6) # Throttle processing to prevent floods
+            await asyncio.sleep(10) # Throttle processing to prevent floods
             message_queue.task_done()
 
 async def process_message(client, message):
@@ -1267,7 +1267,7 @@ async def process_message(client, message):
                         content_hash = hashlib.sha256(chunk).hexdigest()
                         break
 
-                    await asyncio.sleep(6)
+                    await asyncio.sleep(10)
 
                     total_chunks = (file_size + (1024 * 1024) - 1) // (1024 * 1024)
 
@@ -1276,7 +1276,7 @@ async def process_message(client, message):
                         async for chunk in bot.stream_media(message, offset=total_chunks // 2, limit=1):
                             hash_middle = hashlib.sha256(chunk).hexdigest()
                             break
-                        await asyncio.sleep(6)
+                        await asyncio.sleep(10)
                     else:
                         hash_middle = content_hash
 

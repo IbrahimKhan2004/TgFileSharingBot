@@ -27,6 +27,7 @@ async def resolve_final_url(start_url: str) -> str:
     if not start_url:
         return start_url
 
+    logger.info(f"Resolving URL: {start_url}")
     try:
         # Mimic a standard Chrome browser on Windows to pass basic bot checks
         headers = {
@@ -62,17 +63,22 @@ async def get_destination(request_id):
     Secure endpoint to fetch the final resolved URL.
     This is called via AJAX from the gate page only after captcha is solved.
     """
+    logger.info(f"AJAX Request received for ID: {request_id}")
     if not request_id:
+        logger.warning("Request failed: Missing ID")
         return {"error": "Missing ID"}, 400
 
     # Fetch from DB
     shortener_url = await get_shortener_link_async(request_id)
     if not shortener_url:
+        logger.warning(f"Request failed: Link not found in DB for ID {request_id}")
         return {"error": "Link expired or invalid"}, 404
 
+    logger.info(f"Link found in DB: {shortener_url}. Starting server-side resolution...")
     # Resolve server-side
     final_destination = await resolve_final_url(shortener_url)
 
+    logger.info(f"Successfully resolved URL for ID {request_id} -> {final_destination}")
     # Return as JSON
     return {"url": final_destination}
 
@@ -84,14 +90,17 @@ async def human_gate():
     2. Renders the UI without any sensitive URLs in the source.
     """
     request_id = request.args.get('id')
+    logger.info(f"Gate page visited for ID: {request_id}")
 
     # Basic Validation
     if not request_id:
+        logger.warning("Gate access failed: Missing ID")
         return "Invalid request. Missing ID.", 400
 
     # Check if link exists (without resolving yet)
     exists = await get_shortener_link_async(request_id)
     if not exists:
+        logger.warning(f"Gate access failed: ID {request_id} not found in DB")
         return "Invalid ID or link expired.", 404
 
     # Capture User Info for Display

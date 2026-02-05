@@ -7,3 +7,10 @@
 [04-Feb-26 11:18:45 - INFO] - root - Task started: process_queue
 [05-Feb-26 22:51:46 - INFO] - database - Connected to Secondary Database (DB 2) successfully.
 [05-Feb-26 22:51:46 - INFO] - app - Resolved URL: https://short.link -> https://short.link
+[05-Feb-26 23:02:41 - INFO] - database - Connected to Secondary Database (DB 2) successfully.
+[05-Feb-26 23:02:41 - INFO] - app - Gate page visited for ID: 123
+[05-Feb-26 23:02:41 - INFO] - app - AJAX Request received for ID: 123
+[05-Feb-26 23:02:41 - INFO] - app - Link found in DB: https://short.link. Starting server-side resolution...
+[05-Feb-26 23:02:41 - INFO] - app - Resolving URL: https://short.link
+[05-Feb-26 23:02:42 - INFO] - app - Resolved URL: https://short.link -> https://short.link
+[05-Feb-26 23:02:42 - INFO] - app - Successfully resolved URL for ID 123 -> https://short.link

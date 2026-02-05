@@ -56,14 +56,32 @@ async def resolve_final_url(start_url: str) -> str:
 async def hello_world():
     return '⚡Your App is Running⚡'
 
+@app.route('/get_destination/<request_id>')
+async def get_destination(request_id):
+    """
+    Secure endpoint to fetch the final resolved URL.
+    This is called via AJAX from the gate page only after captcha is solved.
+    """
+    if not request_id:
+        return {"error": "Missing ID"}, 400
+
+    # Fetch from DB
+    shortener_url = await get_shortener_link_async(request_id)
+    if not shortener_url:
+        return {"error": "Link expired or invalid"}, 404
+
+    # Resolve server-side
+    final_destination = await resolve_final_url(shortener_url)
+
+    # Return as JSON
+    return {"url": final_destination}
+
 @app.route('/gate')
 async def human_gate():
     """
     The verification gate page.
     1. Validates the request ID.
-    2. Fetches the link from the DB.
-    3. Resolves the final destination server-side to skip redirect chains.
-    4. Renders a secure page with a simulated captcha and encoded URL.
+    2. Renders the UI without any sensitive URLs in the source.
     """
     request_id = request.args.get('id')
 
@@ -71,18 +89,10 @@ async def human_gate():
     if not request_id:
         return "Invalid request. Missing ID.", 400
 
-    # Fetch the destination URL from Database
-    shortener_redirect_url = await get_shortener_link_async(request_id)
-    if not shortener_redirect_url:
+    # Check if link exists (without resolving yet)
+    exists = await get_shortener_link_async(request_id)
+    if not exists:
         return "Invalid ID or link expired.", 404
-
-    # Resolve the redirect chain server-side to get the final URL
-    # This prevents the "Via" browser or IDM from seeing intermediate redirects
-    final_destination = await resolve_final_url(shortener_redirect_url)
-
-    # Encode the final URL in Base64
-    # This ensures the raw URL is not visible in the HTML source until decoded
-    encoded_url = base64.b64encode(final_destination.encode('utf-8')).decode('utf-8')
 
     # Capture User Info for Display
     client_ip = request.headers.get('X-Forwarded-For', request.remote_addr)
@@ -94,7 +104,7 @@ async def human_gate():
     # - Browser Integrity Check (JS)
     # - User IP & Device Info Display
     # - "Secure Connection" indicator
-    # - Direct Redirect Logic (Base64 decode -> window.location)
+    # - AJAX Fetch Logic (URL is fetched only after click)
     html_content = """
 <!DOCTYPE html>
 <html lang="en">
@@ -352,7 +362,7 @@ button#continueBtn.active:hover {
 
 <script>
   let captchaSolved = false;
-  const encodedUrl = "{{ encoded_url }}";
+  const requestId = "{{ request_id }}";
 
   // Browser Verification Logic
   function checkBrowser() {
@@ -405,15 +415,28 @@ button#continueBtn.active:hover {
   }
 
   // 3. Redirect Logic (Only when active)
-  document.getElementById("continueBtn").onclick = function() {
+  document.getElementById("continueBtn").onclick = async function() {
     if (this.classList.contains('active') && captchaSolved) {
+        this.innerText = "Resolving...";
+        this.classList.remove('active');
+
         try {
-            // Decode Base64 and redirect
-            const decoded = atob(encodedUrl);
-            window.location.href = decoded;
+            // Secret Fetch: Link is requested only now
+            const response = await fetch(`/get_destination/${requestId}`);
+            const data = await response.json();
+
+            if (data.url) {
+                window.location.href = data.url;
+            } else {
+                alert("Error: " + (data.error || "Could not resolve link"));
+                this.innerText = "Try Again";
+                this.classList.add('active');
+            }
         } catch(e) {
-            console.error("Decoding failed", e);
-            alert("Error: Invalid Link");
+            console.error("Fetch failed", e);
+            alert("Connection error. Please try again.");
+            this.innerText = "Try Again";
+            this.classList.add('active');
         }
     }
   };
@@ -422,7 +445,7 @@ button#continueBtn.active:hover {
 </body>
 </html>
     """
-    return await render_template_string(html_content, encoded_url=encoded_url, client_ip=client_ip, user_agent=user_agent)
+    return await render_template_string(html_content, request_id=request_id, client_ip=client_ip, user_agent=user_agent)
 
 
 @app.route('/verify/<request_id>')

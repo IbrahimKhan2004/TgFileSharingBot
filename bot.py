@@ -1509,6 +1509,8 @@ async def process_message(client, message):
 
 @bot.on_message(filters.command('restart') & filters.private & filters.user(OWNER_ID))
 async def restart(client, message):
+    restart_msg = await message.reply_text("Restarting...")
+    await update_dynamic_config('restart_data', {'chat_id': message.chat.id, 'message_id': restart_msg.id})
     os.system("python3 update.py")  
     os.execl(sys.executable, sys.executable, "bot.py")
 
@@ -1892,6 +1894,31 @@ async def prune_inactive_users_scheduler():
 
 async def main():
     await load_initial_data()
+
+    # Check for pending restart
+    try:
+        restart_data = bot_config.get('restart_data') # This comes from get_dynamic_config in load_initial_data?
+        # Actually load_initial_data puts values into bot_config, but get_dynamic_config returns the raw doc
+        # Let's fetch fresh config to be sure, or rely on load_initial_data updating bot_config
+        # But load_initial_data filters specific keys. Let's fetch directly.
+        full_config = await get_dynamic_config()
+        if 'restart_data' in full_config and full_config['restart_data']:
+            r_data = full_config['restart_data']
+            try:
+                await bot.edit_message_text(chat_id=r_data['chat_id'], message_id=r_data['message_id'], text="Bot Restarted! ✅")
+            except Exception as e:
+                logger.warning(f"Failed to edit restart message: {e}")
+                # Fallback: Send new message
+                try:
+                    await bot.send_message(chat_id=r_data['chat_id'], text="Bot Restarted! ✅")
+                except:
+                    pass
+
+            # Clear the flag
+            await update_dynamic_config('restart_data', None)
+    except Exception as e:
+        logger.error(f"Error checking restart status: {e}")
+
     logging.info("Scheduling task: process_queue")
     asyncio.create_task(process_queue())
     logging.info("Scheduling task: daily_reset_scheduler")

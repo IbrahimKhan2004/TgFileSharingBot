@@ -79,7 +79,7 @@ async def add_processed_file(file_unique_id, caption, content_hash=None, hash_mi
     else:
         logger.error("DB 2 not configured or unavailable. File save failed.")
 
-async def is_file_processed(file_unique_id, caption, content_hash=None, file_size=None, file_name=None, duration=None):
+async def is_file_processed(file_unique_id, caption, content_hash=None, hash_middle=None, hash_end=None, file_size=None, file_name=None, duration=None):
     """
     Checks if a file is a duplicate.
     Checks DB1 first, then DB2 if not found.
@@ -90,8 +90,9 @@ async def is_file_processed(file_unique_id, caption, content_hash=None, file_siz
         {'caption': caption}
     ]
 
-    if content_hash:
-        query_conditions.append({'content_hash': content_hash})
+    if content_hash: query_conditions.append({'content_hash': content_hash})
+    if hash_middle: query_conditions.append({'hash_middle': hash_middle})
+    if hash_end: query_conditions.append({'hash_end': hash_end})
 
     # Composite check for re-uploads with different IDs/Hashes
     if file_size and file_name:
@@ -130,11 +131,12 @@ async def remove_processed_file_by_caption(caption: str):
 
     return deleted_count
 
-async def remove_processed_file_by_id_or_hash(file_unique_id: str, content_hash: str = None):
+async def remove_processed_file_by_id_or_hash(file_unique_id: str, content_hash: str = None, hash_middle: str = None, hash_end: str = None):
     """Removes a file's record based on file_unique_id or content_hash."""
     or_conditions = [{'_id': file_unique_id}]
-    if content_hash:
-        or_conditions.append({'content_hash': content_hash})
+    if content_hash: or_conditions.append({'content_hash': content_hash})
+    if hash_middle: or_conditions.append({'hash_middle': hash_middle})
+    if hash_end: or_conditions.append({'hash_end': hash_end})
 
     query = {'$or': or_conditions}
 

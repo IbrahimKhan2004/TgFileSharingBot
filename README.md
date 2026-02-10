@@ -16,6 +16,7 @@ The bot operates using a multi-channel system and a token verification process f
     *   For each file, the bot:
         *   Extracts/cleans the file name.
         *   Calculates file size and duration (for videos).
+        *   **Duplicate Detection:** Checks if the file already exists using Unique ID, Caption, or Configurable Hash calculation (Start, Middle, End).
         *   Attempts to fetch movie/show poster images from TMDB using the file name.
         *   Creates a new post in the **Update Channel (`UPDATE_CHANNEL_ID`)**. This post typically includes the poster (if found) or a thumbnail, file details (name, size, duration), and a crucial "Send in DM" button.
 
@@ -58,7 +59,10 @@ The bot operates using a multi-channel system and a token verification process f
 *   **Broadcast Functionality:** Owner can send messages to all bot users.
 *   **Log Retrieval:** Owner can fetch the bot's `log.txt` file.
 *   **Restart & Update:** Owner can restart and update the bot via commands.
-*   **Flask Web App:** Includes a minimal Flask app, likely for health checks on hosting platforms.
+*   **Configurable Duplicate Detection:**
+    *   **Hash Calculation:** Toggle hash-based duplicate detection on or off.
+    *   **Hash Parts:** Configure which parts of the file to hash (Start, Middle, End) for precise control over performance and accuracy.
+    *   **Robust Verification:** Prevents false positives by ensuring no contradictions between calculated hashes and database records.
 
 ## Statistics and Monitoring
 
@@ -71,14 +75,6 @@ The bot includes features for monitoring its usage and ensuring system health.
     *   **Files Shared Today:** A counter for the total number of files downloaded by all users on the current day. This also resets to zero at midnight (IST).
     *   **Bot Uptime:** Shows how long the bot has been running since its last restart.
     *   **Ping:** Displays the latency of the bot's response time.
-
-*   **Daily Reset Mechanism:**
-    *   The daily statistics are designed to be **restart-proof**. If the bot is offline at midnight, it will automatically run the reset the moment it comes back online, ensuring you never have incorrect or missed daily stats.
-    *   This reset process is **safe** and only affects the daily statistics. It **does not** interfere with user data, token timers, or personal file limits.
-
-*   **Token Expiration Notifications:**
-    *   When a user's token expires (based on `TOKEN_TIMEOUT`), the bot will automatically detect it and send them a notification message prompting them to get a new token.
-    *   A user's personal file download limit (`DAILY_LIMIT`) is tied directly to their token. It resets to zero **only** when they successfully verify with a new token, not on a daily schedule.
 
 ## Channel Configuration Explained
 
@@ -130,73 +126,12 @@ Create a `config.env` file in the root directory or set these environment variab
 | `DAILY_LIMIT`         | Maximum number of files a user can download per token validity period.                                     | `10`                               |
 | `FORCE_SUB_CHANNEL`   | (Optional) Channel ID or Link that users must join to use the bot.                                         | `-100xxxx` or `https://t.me/xxxx`  |
 | `AUTO_DELETE_TIME`    | (Optional) Time in seconds to auto-delete sent files. Defaults to 60s.                                     | `60`                               |
+| `HASH_CALCULATION`    | (Optional) `True` or `False`. Enable/Disable hash-based duplicate detection. Defaults to `True`.           | `True`                             |
+| `HASH_PARTS`          | (Optional) Which parts of file to hash: `1` (Start), `2` (Middle), `3` (End). Defaults to `1,2,3`.         | `1,2,3`                            |
 | `MONGO_URI_2`         | (Optional) Second MongoDB URI for multi-database failover support.                                         | `mongodb+srv://...`                |
 | `CONFIG_FILE_URL`     | (Optional) A direct URL to a `config.env` file. If set, the bot will try to download it on startup/update. |                                    |
 | `UPSTREAM_REPO`       | (Optional) Git repository URL for bot updates (used by `update.py`). Defaults to original repo.            |                                    |
 | `UPSTREAM_BRANCH`     | (Optional) Git repository branch for bot updates. Defaults to `main`.                                      |                                    |
-
-## Multi-Database Support
-
-The bot supports a dual-database architecture to handle storage limits (e.g., free tier quotas).
-*   **Failover Writes:** If the primary `MONGO_URI` is full or fails to write, the bot automatically tries to save the data to `MONGO_URI_2`.
-*   **Unified Reads:** When checking for duplicates or user data, the bot searches the primary database first. If not found, it seamlessly checks the secondary database.
-*   **Maintenance:** Admin commands like `/dbstats` and `/cleandb` operate on **both** databases simultaneously.
-
-## Deployment
-
-### Prerequisites
-
-*   Python 3.10+
-*   Git
-*   MongoDB instance
-
-### Manual Setup
-
-1.  **Clone the repository:**
-    ```bash
-    git clone https://github.com/your-username/TgFileSharingBot.git
-    cd TgFileSharingBot-main
-    ```
-
-2.  **Create `config.env`:**
-    Copy `config_sample.env` to `config.env` and fill in your details:
-    ```bash
-    cp config_sample.env config.env
-    nano config.env # Or your preferred editor
-    ```
-
-3.  **Install dependencies:**
-    ```bash
-    pip3 install -r requirements.txt
-    ```
-
-4.  **Set up Channels:**
-    *   Create the three required Telegram channels (`DB_CHANNEL_ID`, `UPDATE_CHANNEL_ID`, `LOG_CHANNEL_ID`).
-    *   Make your bot an admin in all three channels with necessary permissions.
-    *   Add the `TUT_ID` message in your `LOG_CHANNEL_ID` (e.g., a message explaining how to click the link from the shortener and what to expect). Get its message ID and put it in `config.env`.
-
-5.  **Run the bot:**
-    The `CMD` in the Dockerfile is `["sh", "start.sh"]`. If a `start.sh` is not provided in your version, you'd typically run `bot.py`. Assuming `start.sh` contains `python3 bot.py`:
-    ```bash
-    sh start.sh
-    # OR if start.sh is missing/simple:
-    # python3 bot.py
-    ```
-    (Note: The provided `start.sh` is not in the file list, but the Dockerfile calls it. If it's simple, it might just be `python3 bot.py & python3 app.py`. For a production setup, `gunicorn app:app` would be better for the Flask part if it were more complex.)
-
-### Docker Setup
-
-1.  **Prepare `config.env`:** Ensure your `config.env` file is in the `TgFileSharingBot-main` directory and correctly filled.
-2.  **Build the Docker image:**
-    ```bash
-    docker build -t tgfilesharingbot .
-    ```
-3.  **Run the Docker container:**
-    ```bash
-    docker run -d --env-file ./config.env --name filebot tgfilesharingbot
-    ```
-    (Note: The Dockerfile copies `config.env` if `CONFIG_FILE_URL` is not used effectively. It's generally better to pass env vars directly or use `--env-file` if your Dockerfile doesn't handle `config.env` robustly via `CONFIG_FILE_URL`.)
-    The current Dockerfile *copies* `requirements.txt` and then `COPY . .`, so if `config.env` is present at build time, it *could* be copied in, but it's better practice to manage secrets outside the image. The `CONFIG_FILE_URL` mechanism in `config.py` is an attempt to fetch it at runtime.
 
 ## Key Commands
 
@@ -208,6 +143,7 @@ The bot supports a dual-database architecture to handle storage limits (e.g., fr
 *   `/broadcast` (as a reply to a message): Broadcasts the replied message to all users in the database.
 *   `/log`: Sends the `log.txt` file to the owner.
 *   `/restart`: Restarts the bot. Pulls updates from `UPSTREAM_REPO` if configured, then restarts the Python process.
+*   `/settings`: Opens the interactive settings menu to configure bot parameters (including Hash Calculation and Parts) without restarting.
 *   `/remove_duplicate <file_caption>`: Manually removes a file record from the database by its exact caption. This is useful for fixing "phantom duplicate" errors if a file was deleted from the channel but its record remains.
 
 ### All Commands (for BotFather)

@@ -80,7 +80,8 @@ async def load_initial_data():
         'AUTO_DELETE_TIME': int(db_config.get('AUTO_DELETE_TIME', AUTO_DELETE_TIME)),
         'PROTECT_CONTENT': str(db_config.get('PROTECT_CONTENT', PROTECT_CONTENT)).lower() in ('true', '1', 't'),
         'HASH_CALCULATION': str(db_config.get('HASH_CALCULATION', HASH_CALCULATION)).lower() in ('true', '1', 't'),
-        'HASH_PARTS': db_config.get('HASH_PARTS', HASH_PARTS)
+        'HASH_PARTS': db_config.get('HASH_PARTS', HASH_PARTS),
+        'detect': str(db_config.get('detect', detect)).lower() in ('true', '1', 't')
     }
 
     logger.info("Successfully loaded all user data and dynamic config from the database.")
@@ -791,6 +792,7 @@ async def settings_command(client, message):
         [InlineKeyboardButton(f"Protect Content: {bot_config.get('PROTECT_CONTENT', False)}", callback_data="set_protect_content")],
         [InlineKeyboardButton(f"Hash Calc: {bot_config.get('HASH_CALCULATION', True)}", callback_data="set_hash_calc")],
         [InlineKeyboardButton(f"Hash Parts: {bot_config.get('HASH_PARTS', '1,2,3')}", callback_data="set_hash_parts")],
+        [InlineKeyboardButton(f"Detect: {bot_config.get('detect', True)}", callback_data="set_detect")],
         [InlineKeyboardButton("🔄 Restart Bot", callback_data="restart_bot")],
         [InlineKeyboardButton("❌ Close", callback_data="close_settings")]
     ]
@@ -826,6 +828,8 @@ async def settings_callback(client, callback_query):
         prompt = "Send True/False to Enable/Disable <b>Hash Calculation</b> (True/False):"
     elif action == "set_hash_parts":
         prompt = "Send <b>Hash Parts</b> (e.g., 1,2,3 or 1 or 2,3):"
+    elif action == "set_detect":
+        prompt = "Send True/False to Enable/Disable <b>Detect</b>:"
     else:
         return
 
@@ -923,6 +927,15 @@ async def settings_callback(client, callback_query):
                 return
             new_value = ",".join(valid_parts)
             key = 'HASH_PARTS'
+        elif action == "set_detect":
+            if new_value.lower() in ('true', '1', 't'):
+                new_value = True
+            elif new_value.lower() in ('false', '0', 'f'):
+                new_value = False
+            else:
+                await callback_query.message.reply_text("Invalid input. Send True or False.")
+                return
+            key = 'detect'
 
         if key:
             await update_dynamic_config(key, new_value)
@@ -1267,7 +1280,8 @@ async def process_queue():
         except Exception as e:
             logger.error(f"Error in process_queue: {e}", exc_info=True)
         finally:
-            await asyncio.sleep(10) # Throttle processing to prevent floods
+            sleep_time = 10 if bot_config.get('detect', True) else 6
+            await asyncio.sleep(sleep_time) # Throttle processing to prevent floods
             message_queue.task_done()
 
 async def process_message(client, message):
@@ -1291,128 +1305,16 @@ async def process_message(client, message):
         file_size = media.file_size
         duration_raw = getattr(media, 'duration', 0)
 
-        # Pre-check for duplicates (Database First) to avoid unnecessary downloads
-        duplicate_doc = await is_file_processed(file_unique_id, caption, None, None, None, file_size, file_name, duration_raw)
-        if duplicate_doc:
-            match_reason = "Unique ID" if duplicate_doc['_id'] == file_unique_id else \
-                           "Caption" if duplicate_doc['caption'] == caption else \
-                           "Metadata (Size/Name/Duration)"
+        # Only perform detection logic if 'detect' is True
+        if bot_config.get('detect', True):
+            # Pre-check for duplicates (Database First) to avoid unnecessary downloads
+            duplicate_doc = await is_file_processed(file_unique_id, caption, None, None, None, file_size, file_name, duration_raw)
+            if duplicate_doc:
+                match_reason = "Unique ID" if duplicate_doc['_id'] == file_unique_id else \
+                               "Caption" if duplicate_doc['caption'] == caption else \
+                               "Metadata (Size/Name/Duration)"
 
-            logger.warning(f"Duplicate file detected and removed (Pre-check): {caption} (Reason: {match_reason})")
-            log_msg = (
-                f"<b>⚠️ Duplicate File Removed</b>\n\n"
-                f"<b>Caption:</b> {caption}\n"
-                f"<b>File Name:</b> <code>{file_name}</code>\n"
-                f"<b>New File ID:</b> <code>{file_unique_id}</code>\n"
-                f"<b>Blocking ID (In DB):</b> <code>{duplicate_doc['_id']}</code>\n"
-                f"<b>Match Reason:</b> <code>{match_reason}</code>\n"
-                f"<b>Status:</b> Skipped Download 🚀"
-            )
-            await bot.send_message(LOG_CHANNEL_ID, log_msg)
-            await safe_api_call(lambda: message.delete())
-            return
-
-        if (message.video or message.document) and bot_config.get('HASH_CALCULATION', True):
-            hash_parts_config = str(bot_config.get('HASH_PARTS', "1,2,3"))
-            parts = [int(p.strip()) for p in hash_parts_config.split(',') if p.strip().isdigit()]
-
-            max_retries = 3
-            for attempt in range(max_retries):
-                try:
-                    total_chunks = (file_size + (1024 * 1024) - 1) // (1024 * 1024)
-                    processed_parts = 0
-
-                    # Part 1: Start
-                    if 1 in parts:
-                        async for chunk in bot.stream_media(message, offset=0, limit=1):
-                            content_hash = hashlib.sha256(chunk).hexdigest()
-                            break
-                        processed_parts += 1
-
-                    # Part 2: Middle
-                    if 2 in parts:
-                        if processed_parts > 0: await asyncio.sleep(10)
-
-                        offset = total_chunks // 2 if total_chunks > 0 else 0
-                        async for chunk in bot.stream_media(message, offset=offset, limit=1):
-                            hash_middle = hashlib.sha256(chunk).hexdigest()
-                            break
-                        processed_parts += 1
-
-                    # Part 3: End
-                    if 3 in parts:
-                        if processed_parts > 0: await asyncio.sleep(10)
-
-                        offset = total_chunks - 1 if total_chunks > 0 else 0
-                        async for chunk in bot.stream_media(message, offset=offset, limit=1):
-                            hash_end = hashlib.sha256(chunk).hexdigest()
-                            break
-                        processed_parts += 1
-
-                    break
-                except FloodWait as e:
-                    if attempt < max_retries - 1:
-                        wait_time = e.value + 5
-                        logger.warning(f"FloodWait during hash computation for {caption}. Sleeping for {wait_time}s. Attempt {attempt + 1}/{max_retries}")
-                        await asyncio.sleep(wait_time)
-                    else:
-                        logger.error(f"Could not compute hash for {caption} after {max_retries} attempts: {e}")
-                        await bot.send_message(OWNER_ID, f"<b>Warning:</b> Could not compute hash for file <code>{caption}</code> after {max_retries} attempts. Proceeding without hash-based duplicate check.")
-                except Exception as e:
-                    logger.error(f"Could not compute hash for {caption}: {e}")
-                    await bot.send_message(OWNER_ID, f"<b>Warning:</b> An error occurred during hash computation for <code>{caption}</code>. Proceeding without hash-based duplicate check.\n\n<b>Error:</b> {e}")
-                    break
-
-        duplicate_doc = await is_file_processed(file_unique_id, caption, content_hash, hash_middle, hash_end, file_size, file_name, duration_raw)
-        if duplicate_doc:
-            match_reason = None
-
-            # 1. Unique ID Match
-            if duplicate_doc['_id'] == file_unique_id:
-                match_reason = "Unique ID"
-
-            # 2. Caption Match
-            elif duplicate_doc['caption'] == caption:
-                match_reason = "Caption"
-
-            # 3. Hash Match (Robust)
-            else:
-                hashes_match = False
-                contradiction = False
-
-                # Check Start Hash
-                if content_hash and duplicate_doc.get('content_hash'):
-                    if content_hash == duplicate_doc['content_hash']:
-                        hashes_match = True
-                    else:
-                        contradiction = True
-
-                # Check Middle Hash
-                if not contradiction and hash_middle and duplicate_doc.get('hash_middle'):
-                    if hash_middle == duplicate_doc['hash_middle']:
-                        hashes_match = True
-                    else:
-                        contradiction = True
-
-                # Check End Hash
-                if not contradiction and hash_end and duplicate_doc.get('hash_end'):
-                    if hash_end == duplicate_doc['hash_end']:
-                        hashes_match = True
-                    else:
-                        contradiction = True
-
-                if hashes_match and not contradiction:
-                    match_reason = "Hash"
-
-                # 4. Metadata Match (Only if not contradicted by hashes)
-                if not match_reason and not contradiction:
-                     # Check if file size and name match
-                     if duplicate_doc.get('file_size') == file_size and \
-                        duplicate_doc.get('file_name') == file_name:
-                             match_reason = "Metadata (Size/Name/Duration)"
-
-            if match_reason:
-                logger.warning(f"Duplicate file detected and removed: {caption} (Reason: {match_reason})")
+                logger.warning(f"Duplicate file detected and removed (Pre-check): {caption} (Reason: {match_reason})")
                 log_msg = (
                     f"<b>⚠️ Duplicate File Removed</b>\n\n"
                     f"<b>Caption:</b> {caption}\n"
@@ -1420,13 +1322,127 @@ async def process_message(client, message):
                     f"<b>New File ID:</b> <code>{file_unique_id}</code>\n"
                     f"<b>Blocking ID (In DB):</b> <code>{duplicate_doc['_id']}</code>\n"
                     f"<b>Match Reason:</b> <code>{match_reason}</code>\n"
-                    f"<b>Hash (Start):</b> <code>{content_hash or 'N/A'}</code>"
+                    f"<b>Status:</b> Skipped Download 🚀"
                 )
                 await bot.send_message(LOG_CHANNEL_ID, log_msg)
                 await safe_api_call(lambda: message.delete())
                 return
 
-        await add_processed_file(file_unique_id, caption, content_hash, hash_middle, hash_end, file_size, file_name, duration_raw)
+            if (message.video or message.document) and bot_config.get('HASH_CALCULATION', True):
+                hash_parts_config = str(bot_config.get('HASH_PARTS', "1,2,3"))
+                parts = [int(p.strip()) for p in hash_parts_config.split(',') if p.strip().isdigit()]
+
+                max_retries = 3
+                for attempt in range(max_retries):
+                    try:
+                        total_chunks = (file_size + (1024 * 1024) - 1) // (1024 * 1024)
+                        processed_parts = 0
+
+                        # Part 1: Start
+                        if 1 in parts:
+                            async for chunk in bot.stream_media(message, offset=0, limit=1):
+                                content_hash = hashlib.sha256(chunk).hexdigest()
+                                break
+                            processed_parts += 1
+
+                        # Part 2: Middle
+                        if 2 in parts:
+                            if processed_parts > 0: await asyncio.sleep(10)
+
+                            offset = total_chunks // 2 if total_chunks > 0 else 0
+                            async for chunk in bot.stream_media(message, offset=offset, limit=1):
+                                hash_middle = hashlib.sha256(chunk).hexdigest()
+                                break
+                            processed_parts += 1
+
+                        # Part 3: End
+                        if 3 in parts:
+                            if processed_parts > 0: await asyncio.sleep(10)
+
+                            offset = total_chunks - 1 if total_chunks > 0 else 0
+                            async for chunk in bot.stream_media(message, offset=offset, limit=1):
+                                hash_end = hashlib.sha256(chunk).hexdigest()
+                                break
+                            processed_parts += 1
+
+                        break
+                    except FloodWait as e:
+                        if attempt < max_retries - 1:
+                            wait_time = e.value + 5
+                            logger.warning(f"FloodWait during hash computation for {caption}. Sleeping for {wait_time}s. Attempt {attempt + 1}/{max_retries}")
+                            await asyncio.sleep(wait_time)
+                        else:
+                            logger.error(f"Could not compute hash for {caption} after {max_retries} attempts: {e}")
+                            await bot.send_message(OWNER_ID, f"<b>Warning:</b> Could not compute hash for file <code>{caption}</code> after {max_retries} attempts. Proceeding without hash-based duplicate check.")
+                    except Exception as e:
+                        logger.error(f"Could not compute hash for {caption}: {e}")
+                        await bot.send_message(OWNER_ID, f"<b>Warning:</b> An error occurred during hash computation for <code>{caption}</code>. Proceeding without hash-based duplicate check.\n\n<b>Error:</b> {e}")
+                        break
+
+            duplicate_doc = await is_file_processed(file_unique_id, caption, content_hash, hash_middle, hash_end, file_size, file_name, duration_raw)
+            if duplicate_doc:
+                match_reason = None
+
+                # 1. Unique ID Match
+                if duplicate_doc['_id'] == file_unique_id:
+                    match_reason = "Unique ID"
+
+                # 2. Caption Match
+                elif duplicate_doc['caption'] == caption:
+                    match_reason = "Caption"
+
+                # 3. Hash Match (Robust)
+                else:
+                    hashes_match = False
+                    contradiction = False
+
+                    # Check Start Hash
+                    if content_hash and duplicate_doc.get('content_hash'):
+                        if content_hash == duplicate_doc['content_hash']:
+                            hashes_match = True
+                        else:
+                            contradiction = True
+
+                    # Check Middle Hash
+                    if not contradiction and hash_middle and duplicate_doc.get('hash_middle'):
+                        if hash_middle == duplicate_doc['hash_middle']:
+                            hashes_match = True
+                        else:
+                            contradiction = True
+
+                    # Check End Hash
+                    if not contradiction and hash_end and duplicate_doc.get('hash_end'):
+                        if hash_end == duplicate_doc['hash_end']:
+                            hashes_match = True
+                        else:
+                            contradiction = True
+
+                    if hashes_match and not contradiction:
+                        match_reason = "Hash"
+
+                    # 4. Metadata Match (Only if not contradicted by hashes)
+                    if not match_reason and not contradiction:
+                         # Check if file size and name match
+                         if duplicate_doc.get('file_size') == file_size and \
+                            duplicate_doc.get('file_name') == file_name:
+                                 match_reason = "Metadata (Size/Name/Duration)"
+
+                if match_reason:
+                    logger.warning(f"Duplicate file detected and removed: {caption} (Reason: {match_reason})")
+                    log_msg = (
+                        f"<b>⚠️ Duplicate File Removed</b>\n\n"
+                        f"<b>Caption:</b> {caption}\n"
+                        f"<b>File Name:</b> <code>{file_name}</code>\n"
+                        f"<b>New File ID:</b> <code>{file_unique_id}</code>\n"
+                        f"<b>Blocking ID (In DB):</b> <code>{duplicate_doc['_id']}</code>\n"
+                        f"<b>Match Reason:</b> <code>{match_reason}</code>\n"
+                        f"<b>Hash (Start):</b> <code>{content_hash or 'N/A'}</code>"
+                    )
+                    await bot.send_message(LOG_CHANNEL_ID, log_msg)
+                    await safe_api_call(lambda: message.delete())
+                    return
+
+            await add_processed_file(file_unique_id, caption, content_hash, hash_middle, hash_end, file_size, file_name, duration_raw)
 
         file_name = await remove_extension(caption)
         file_size = humanbytes(media.file_size)

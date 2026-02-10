@@ -86,3 +86,6 @@ PROTECT_CONTENT = os.getenv('PROTECT_CONTENT', 'False').lower() in ('true', '1',
 # Hash Configuration
 HASH_CALCULATION = os.getenv('HASH_CALCULATION', 'True').lower() in ('true', '1', 't')
 HASH_PARTS = os.getenv('HASH_PARTS', '1,2,3') # Default: Start, Middle, End
+
+# Detect Configuration (New)
+detect = os.getenv('detect', 'True').lower() in ('true', '1', 't')

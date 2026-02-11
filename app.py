@@ -135,9 +135,9 @@ body {
 
 .card {
   background: white;
-  padding: 30px;
+  padding: 0;
   border-radius: 14px;
-  width: 340px;
+  width: 360px;
   text-align: center;
   box-shadow: 0 15px 40px rgba(0,0,0,.2);
   position: relative;
@@ -145,7 +145,176 @@ body {
   -webkit-user-select: none;
   -moz-user-select: none;
   -ms-user-select: none;
+  overflow: hidden;
 }
+
+.card-body {
+  padding: 30px;
+}
+
+/* Palestine Banner Styles */
+.palestine-banner {
+    position: relative;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 20px;
+    padding: 12px 15px;
+    background: #000;
+    overflow: hidden;
+    isolation: isolate;
+}
+
+.palestine-banner::before {
+    content: '';
+    position: absolute;
+    inset: -50%;
+    background:
+        conic-gradient(from 0deg at 30% 50%, #ce1126 0deg, transparent 60deg),
+        conic-gradient(from 180deg at 70% 50%, #009639 0deg, transparent 60deg);
+    animation: bgRotate 20s linear infinite;
+    opacity: 0.15;
+    filter: blur(60px);
+}
+
+@keyframes bgRotate {
+    100% { transform: rotate(360deg); }
+}
+
+.palestine-banner::after {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: -100%;
+    width: 50%;
+    height: 100%;
+    background: linear-gradient(90deg,
+        transparent,
+        rgba(255,255,255,0.03),
+        rgba(255,255,255,0.08),
+        rgba(255,255,255,0.03),
+        transparent);
+    animation: scanLight 4s ease-in-out infinite;
+}
+
+@keyframes scanLight {
+    0% { left: -50%; }
+    100% { left: 150%; }
+}
+
+.palestine-glow {
+    position: absolute;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    height: 2px;
+    background: linear-gradient(90deg,
+        transparent 0%,
+        #ce1126 20%,
+        #fff 50%,
+        #009639 80%,
+        transparent 100%);
+    filter: blur(1px);
+    animation: glowPulse 2s ease-in-out infinite;
+}
+
+@keyframes glowPulse {
+    0%, 100% { opacity: 0.8; }
+    50% { opacity: 1; }
+}
+
+.palestine-flag {
+    position: relative;
+    width: 45px;
+    height: 28px;
+    flex-shrink: 0;
+    transform-style: preserve-3d;
+    perspective: 500px;
+}
+
+.flag-wave {
+    position: absolute;
+    inset: 0;
+    border-radius: 2px;
+    overflow: hidden;
+    transform-origin: left center;
+    animation: realisticWave 2.5s ease-in-out infinite;
+    box-shadow: 0 2px 10px rgba(0,0,0,0.5);
+}
+
+@keyframes realisticWave {
+    0%, 100% { transform: rotateY(0deg) skewY(0deg); }
+    25% { transform: rotateY(15deg) skewY(2deg); }
+    50% { transform: rotateY(5deg) skewY(-1deg); }
+    75% { transform: rotateY(12deg) skewY(1.5deg); }
+}
+
+.flag-pole {
+    position: absolute;
+    left: -2px;
+    top: -3px;
+    bottom: -3px;
+    width: 2px;
+    background: linear-gradient(90deg, #555, #888, #555);
+    border-radius: 1px;
+    z-index: 10;
+}
+
+.flag-stripe {
+    height: 33.33%;
+    width: 100%;
+}
+.flag-stripe.black { background: #000; }
+.flag-stripe.white { background: #fff; }
+.flag-stripe.green { background: #009639; }
+
+.flag-triangle {
+    position: absolute;
+    left: 0;
+    top: 0;
+    width: 0;
+    height: 0;
+    border-top: 14px solid transparent;
+    border-bottom: 14px solid transparent;
+    border-left: 18px solid #ce1126;
+}
+
+.palestine-content {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 2px;
+    z-index: 5;
+}
+
+.palestine-text span {
+    font-size: 8px;
+    color: rgba(255,255,255,0.7);
+    text-transform: uppercase;
+    letter-spacing: 1.5px;
+}
+
+.palestine-text strong {
+    font-size: 13px;
+    font-weight: 800;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    color: #fff;
+}
+
+.palestine-lines {
+    display: flex;
+    gap: 2px;
+}
+
+.palestine-lines span {
+    height: 2px;
+    width: 15px;
+    border-radius: 1px;
+}
+.palestine-lines span:nth-child(1) { background: #ce1126; }
+.palestine-lines span:nth-child(2) { background: #fff; }
+.palestine-lines span:nth-child(3) { background: #009639; }
 
 /* Titles */
 h2 { color: #1f2937; margin-top: 0; }
@@ -321,7 +490,32 @@ button#continueBtn.active:hover {
 <body>
 
 <div class="card">
+  <!-- Palestine Banner -->
+  <div class="palestine-banner">
+    <div class="palestine-glow"></div>
+    <div class="palestine-flag">
+      <div class="flag-pole"></div>
+      <div class="flag-wave">
+        <div class="flag-stripe black"></div>
+        <div class="flag-stripe white"></div>
+        <div class="flag-stripe green"></div>
+        <div class="flag-triangle"></div>
+      </div>
+    </div>
+    <div class="palestine-content">
+      <div class="palestine-text">
+        <span>From the River to the Sea</span>
+        <strong>Palestine Will Be Free</strong>
+      </div>
+      <div class="palestine-lines">
+        <span></span>
+        <span></span>
+        <span></span>
+      </div>
+    </div>
+  </div>
 
+  <div class="card-body">
   <!-- STEP 1: LOADING -->
   <div id="loading">
     <h2>Checking Security</h2>
@@ -365,6 +559,7 @@ button#continueBtn.active:hover {
       <div>IP: {{ client_ip }}</div>
       <div class="device-info">{{ user_agent }}</div>
     </div>
+  </div>
   </div>
 
 </div>

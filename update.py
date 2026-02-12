@@ -3,6 +3,7 @@ from os import path as ospath, environ
 from subprocess import run as srun
 from requests import get as rget
 from dotenv import load_dotenv
+from urllib.parse import urlparse, urlunparse
 
 CONFIG_FILE_URL = environ.get('CONFIG_FILE_URL')
 try:
@@ -34,19 +35,26 @@ GITHUB_TOKEN = environ.get('GITHUB_TOKEN', '')
 GITHUB_USERNAME = environ.get('GITHUB_USERNAME', '')
 
 if len(GITHUB_TOKEN) > 0:
-    # Check if UPSTREAM_REPO starts with http/https and strip it
-    if UPSTREAM_REPO.startswith('https://'):
-        repo_url = UPSTREAM_REPO.replace('https://', '')
-    elif UPSTREAM_REPO.startswith('http://'):
-        repo_url = UPSTREAM_REPO.replace('http://', '')
-    else:
-        repo_url = UPSTREAM_REPO
+    try:
+        parsed_url = urlparse(UPSTREAM_REPO)
 
-    # Construct authenticated URL
-    if len(GITHUB_USERNAME) > 0:
-        UPSTREAM_REPO = f"https://{GITHUB_USERNAME}:{GITHUB_TOKEN}@{repo_url}"
-    else:
-        UPSTREAM_REPO = f"https://{GITHUB_TOKEN}@{repo_url}"
+        # Determine the hostname (e.g., github.com)
+        # If hostname is None (e.g. invalid URL), fallback to original
+        hostname = parsed_url.hostname if parsed_url.hostname else parsed_url.netloc
+
+        if hostname:
+            # Construct authenticated netloc
+            if len(GITHUB_USERNAME) > 0:
+                new_netloc = f"{GITHUB_USERNAME}:{GITHUB_TOKEN}@{hostname}"
+            else:
+                new_netloc = f"{GITHUB_TOKEN}@{hostname}"
+
+            # Reconstruct URL ensuring HTTPS scheme
+            # urlunparse takes (scheme, netloc, path, params, query, fragment)
+            UPSTREAM_REPO = urlunparse(('https', new_netloc, parsed_url.path, parsed_url.params, parsed_url.query, parsed_url.fragment))
+    except Exception as e:
+        log_error(f"Failed to construct authenticated URL: {e}")
+        # Proceed with original URL if parsing fails
 
 if ospath.exists('.git'):
     srun(["rm", "-rf", ".git"])

@@ -132,6 +132,31 @@ Create a `config.env` file in the root directory or set these environment variab
 | `CONFIG_FILE_URL`     | (Optional) A direct URL to a `config.env` file. If set, the bot will try to download it on startup/update. |                                    |
 | `UPSTREAM_REPO`       | (Optional) Git repository URL for bot updates (used by `update.py`). Defaults to original repo.            |                                    |
 | `UPSTREAM_BRANCH`     | (Optional) Git repository branch for bot updates. Defaults to `main`.                                      |                                    |
+| `GITHUB_TOKEN`        | (Optional) Your GitHub Personal Access Token (PAT) for private repo access.                                | `ghp_...`                          |
+| `GITHUB_USERNAME`     | (Optional) Your GitHub Username.                                                                           | `your_username`                    |
+
+## Private Repository Updates
+
+If you are hosting your own private fork of this bot and want the `/restart` command to pull updates from it, you need to configure the bot with authentication details.
+
+### 1. Generate a GitHub Personal Access Token (PAT)
+
+1.  Go to **GitHub Settings** > **Developer settings** > **Personal access tokens** > **Tokens (classic)**.
+    *   Direct Link: [Generate New Token](https://github.com/settings/tokens/new)
+2.  Click **"Generate new token"** (select "Generate new token (classic)").
+3.  Give it a **Note** (e.g., "Bot Updater").
+4.  **Select Scopes:** Check the `repo` box (Full control of private repositories).
+5.  Click **"Generate token"**.
+6.  **Copy the token immediately.** You won't see it again!
+
+### 2. Configure the Bot
+
+Add the following variables to your `config.env` or environment variables:
+
+*   `UPSTREAM_REPO`: Your private repository URL (e.g., `https://github.com/YourUser/YourPrivateBot`).
+*   `UPSTREAM_BRANCH`: The branch to pull from (usually `main`).
+*   `GITHUB_TOKEN`: The token you just generated (starts with `ghp_`).
+*   `GITHUB_USERNAME`: Your GitHub username.
 
 ## Key Commands
 

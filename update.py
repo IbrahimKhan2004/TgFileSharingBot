@@ -30,6 +30,24 @@ UPSTREAM_BRANCH = environ.get('UPSTREAM_BRANCH', '')
 if len(UPSTREAM_BRANCH) == 0:
     UPSTREAM_BRANCH = 'main'
 
+GITHUB_TOKEN = environ.get('GITHUB_TOKEN', '')
+GITHUB_USERNAME = environ.get('GITHUB_USERNAME', '')
+
+if len(GITHUB_TOKEN) > 0:
+    # Check if UPSTREAM_REPO starts with http/https and strip it
+    if UPSTREAM_REPO.startswith('https://'):
+        repo_url = UPSTREAM_REPO.replace('https://', '')
+    elif UPSTREAM_REPO.startswith('http://'):
+        repo_url = UPSTREAM_REPO.replace('http://', '')
+    else:
+        repo_url = UPSTREAM_REPO
+
+    # Construct authenticated URL
+    if len(GITHUB_USERNAME) > 0:
+        UPSTREAM_REPO = f"https://{GITHUB_USERNAME}:{GITHUB_TOKEN}@{repo_url}"
+    else:
+        UPSTREAM_REPO = f"https://{GITHUB_TOKEN}@{repo_url}"
+
 if ospath.exists('.git'):
     srun(["rm", "-rf", ".git"])
 

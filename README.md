@@ -170,6 +170,7 @@ Add the following variables to your `config.env` or environment variables:
 *   `/restart`: Restarts the bot. Pulls updates from `UPSTREAM_REPO` if configured, then restarts the Python process.
 *   `/settings`: Opens the interactive settings menu to configure bot parameters (including Hash Calculation and Parts) without restarting.
 *   `/remove_duplicate <file_caption>`: Manually removes a file record from the database by its exact caption. This is useful for fixing "phantom duplicate" errors if a file was deleted from the channel but its record remains.
+*   `/system` or `/sys`: View system statistics (CPU, RAM, Disk usage, etc.).
 
 ### All Commands (for BotFather)
 
@@ -191,6 +192,7 @@ restart - Restart the bot
 remove_duplicate - Remove a duplicate file record
 dbstats - Check database storage usage (Owner Only)
 cleandb - Clean database records (Owner Only)
+system - View system resources (CPU/RAM/Disk)
 ```
 
 ### User Commands (Private Chat with Bot)
